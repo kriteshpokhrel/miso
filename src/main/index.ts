@@ -5,11 +5,12 @@ import { fileURLToPath } from 'node:url';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { breakReminder, care, commentCooldown, createPet, disturb, scriptedComment, setHome, shouldFollowCursor, tick } from '../domain/pet.js';
 import { DEFAULT_SETTINGS } from '../shared/contracts.js';
-import type { CareAction, PetState, Settings, Snapshot } from '../shared/contracts.js';
+import type { Attention, CareAction, PetState, Settings, Snapshot } from '../shared/contracts.js';
 import { LocalAiService, MODEL_INFO } from './ai/service.js';
 import { foregroundAppName } from './foreground.js';
 import { StateStore } from './store.js';
 import { normalizeAppName, validateCare, validateSettings } from './validation.js';
+import { cursorAttention, NEUTRAL_ATTENTION } from '../domain/attention.js';
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const rendererFile = path.resolve(directory, '../renderer/index.html');
@@ -48,6 +49,7 @@ let dragOrigin = { x: 0, y: 0 };
 let windowOrigin = { x: 0, y: 0 };
 let previousDragPoint = { x: 0, y: 0 };
 let lastDragUpdate = 0;
+let attention: Attention = { ...NEUTRAL_ATTENTION };
 
 function report(error: unknown, context: string): void {
   console.error(`Nooki ${context}:`, error);
@@ -58,7 +60,7 @@ function report(error: unknown, context: string): void {
 function snapshot(): Snapshot {
   return {
     pet, settings, model: ai.getStatus(), modelInfo: MODEL_INFO, comment, error: lastError,
-    platform: process.platform, packaged: app.isPackaged, moving: overlayMoving,
+    platform: process.platform, packaged: app.isPackaged, moving: overlayMoving, attention,
   };
 }
 
@@ -163,6 +165,7 @@ async function goHome(): Promise<void> {
   if (pet.atHome) return;
   finishDrag();
   pet = setHome(pet, true, Date.now());
+  updateAttention();
   comment = null;
   homeTravel = true;
   if (settings.reducedMotion) { homeTravel = false; overlay?.hide(); }
@@ -230,6 +233,7 @@ function registerIpc(): void {
       }
     }
     settings = next;
+    updateAttention();
     if (overlay) {
       overlay.webContents.setZoomFactor(settings.petSize);
       if (!dragging) positionAtBottom();
@@ -407,6 +411,7 @@ function moveOverlay(now: number): void {
 function step(): void {
   const now = Date.now();
   moveOverlay(now);
+  updateAttention();
   if (now - lastSimulation < 1000) return;
   lastSimulation = now;
   pet = tick(pet, now);
@@ -438,6 +443,16 @@ function step(): void {
   }
 }
 
+function updateAttention(): void {
+  const next = overlay && overlay.isVisible() && !pet.atHome && pet.mood !== 'sleeping'
+    && !settings.reducedMotion && !dragging
+    ? cursorAttention(screen.getCursorScreenPoint(), overlay.getBounds())
+    : { ...NEUTRAL_ATTENTION };
+  if (next.nearby === attention.nearby && Math.abs(next.x - attention.x) < 0.005
+    && Math.abs(next.y - attention.y) < 0.005) return;
+  attention = next;
+  if (overlay && !overlay.webContents.isLoading()) overlay.webContents.send('nooki:attention', attention);
+}
 async function start(): Promise<void> {
   store = new StateStore(app.getPath('userData'));
   const loaded = await store.load();
@@ -483,6 +498,43 @@ async function start(): Promise<void> {
       throw new Error('Desktop isolation smoke failed.');
     }
     if ((result as Record<string, unknown>).hasToolbar) throw new Error('Desktop still contains a persistent care toolbar.');
+    const imageDirectory = smokeDirectory;
+    await mkdir(imageDirectory, { recursive: true });
+    const graphicsDeadline = Date.now() + 15_000;
+    let graphicsReady = false;
+    while (!graphicsReady && Date.now() < graphicsDeadline) {
+      graphicsReady = await window.webContents.executeJavaScript(`document.getElementById('pet-canvas')?.dataset.ready === 'true'`);
+      if (!graphicsReady) await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    if (!graphicsReady) {
+      const error: string = await window.webContents.executeJavaScript(`document.getElementById('pet-render-error')?.textContent`);
+      throw new Error(`The real WebGL cat did not render: ${error}`);
+    }
+    const initialImage = await window.capturePage();
+    const pixels = initialImage.toBitmap();
+    let visiblePixels = 0;
+    let transparentPixels = 0;
+    for (let offset = 3; offset < pixels.length; offset += 4) {
+      if (pixels[offset] === 0) transparentPixels++;
+      else visiblePixels++;
+    }
+    if (visiblePixels < 500 || transparentPixels < 500) throw new Error('The 3D overlay is blank or not transparent.');
+    await writeFile(path.join(imageDirectory, 'idle.png'), initialImage.toPNG());
+    if (timer) clearInterval(timer);
+    try {
+      pet = { ...pet, mood: 'idle' };
+      overlayMoving = false;
+      comment = null;
+      attention = { ...NEUTRAL_ATTENTION };
+      broadcast();
+      for (const [name, x] of [['look-left', -1], ['look-right', 1], ['look-neutral', 0]] as const) {
+        window.webContents.send('nooki:attention', { x, y: 0, nearby: x !== 0 });
+        await new Promise(resolve => setTimeout(resolve, 650));
+        const yaw: number = await window.webContents.executeJavaScript(`Number(document.getElementById('pet-canvas').dataset.lookX)`);
+        if (x === 0 ? Math.abs(yaw) > 0.02 : yaw * x < 0.45) throw new Error(`3D ${name} head tracking failed: ${yaw}`);
+        await writeFile(path.join(imageDirectory, `${name}.png`), (await window.capturePage()).toPNG());
+      }
+    } finally { timer = setInterval(step, 100); }
     const originalBounds = window.getBounds();
     for (let index = 0; index < 30; index++) setPetBounds(originalBounds.x + index % 2, originalBounds.y);
     if (Math.abs(window.getContentBounds().width - WINDOW_SIZE) > 1) {
@@ -493,8 +545,6 @@ async function start(): Promise<void> {
     if (pet.hunger > before) throw new Error('Feed smoke failed.');
     await window.webContents.executeJavaScript(`window.nooki.care('play')`);
     await window.webContents.executeJavaScript(`window.nooki.care('pet')`);
-    const imageDirectory = smokeDirectory;
-    await mkdir(imageDirectory, { recursive: true });
     await new Promise((resolve) => setTimeout(resolve, 200));
     await writeFile(path.join(imageDirectory, 'pet.png'), (await window.capturePage()).toPNG());
     pet = { ...pet, mood: 'mimicking', reactionUntil: Date.now() + 14_000 };
@@ -515,8 +565,10 @@ async function start(): Promise<void> {
     const disturbanceBeforeTap = pet.disturbance;
     await window.webContents.executeJavaScript(`window.nooki.startDrag().then(() => window.nooki.endDrag())`);
     if (pet.disturbance > disturbanceBeforeTap) throw new Error('A stationary tap incorrectly disturbed Nooki.');
+    attention = { x: 1, y: 0, nearby: true };
     await window.webContents.executeJavaScript(`window.nooki.goHome()`);
     if (!pet.atHome) throw new Error('Home smoke failed.');
+    if (attention.nearby || attention.x !== 0 || attention.y !== 0) throw new Error('Home did not neutralize cursor attention.');
     const homeDeadline = Date.now() + 10_000;
     while (window.isVisible() && Date.now() < homeDeadline) {
       await new Promise((resolve) => setTimeout(resolve, 100));
@@ -533,6 +585,7 @@ async function start(): Promise<void> {
     if (settingsWindow.webContents.isLoadingMainFrame()) {
       await new Promise<void>((resolve) => settingsWindow.webContents.once('did-finish-load', () => resolve()));
     }
+    attention = { x: 1, y: 0, nearby: true };
     await settingsWindow.webContents.executeJavaScript(`window.nooki.updateSettings({
       launchAtLogin: false, aiEnabled: false, reducedMotion: true,
       commentFrequency: 'balanced', allowedApps: ['Code.exe'], petSize: 1.3, breakReminders: true
@@ -540,6 +593,10 @@ async function start(): Promise<void> {
     if (settings.launchAtLogin || !settings.reducedMotion || settings.allowedApps[0] !== 'code.exe') {
       throw new Error('Settings IPC smoke failed.');
     }
+    if (attention.nearby) throw new Error('Reduced motion did not disable native cursor attention.');
+    await new Promise(resolve => setTimeout(resolve, 200));
+    const reducedYaw: number = await window.webContents.executeJavaScript(`Number(document.getElementById('pet-canvas').dataset.lookX)`);
+    if (reducedYaw !== 0) throw new Error('Reduced motion left the 3D head tracking.');
     if (Math.abs(window.getContentBounds().width - 390) > 1 || Math.abs(window.webContents.getZoomFactor() - 1.3) > 0.01) {
       throw new Error(`Configurable native pet size smoke failed: content=${JSON.stringify(window.getContentBounds())}; outer=${JSON.stringify(window.getBounds())}; zoom=${window.webContents.getZoomFactor()}`);
     }
@@ -567,7 +624,7 @@ async function start(): Promise<void> {
     if (reloaded.state?.settings.allowedApps[0] !== 'code.exe' || !reloaded.state.settings.reducedMotion) {
       throw new Error('Saved preferences did not round-trip.');
     }
-    console.log('NOOKI_SMOKE passed: isolated renderer/IPC, care, mimic, irritation, break reminders, home/needs pause, restore, size, consent, privilege guards, persistence.');
+    console.log('NOOKI_SMOKE passed: real transparent WebGL, directional gaze/neutral reset, reduced motion, isolated renderer/IPC, care, mimic, irritation, break reminders, home/needs pause, restore, size, consent, privilege guards, persistence.');
     app.quit();
   }
 }

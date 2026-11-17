@@ -2,7 +2,7 @@
 
 A gentle desktop cat for Windows and macOS. Feed, pet or play; let Nooki wander nearby, or send them home for quiet. Needs never cause death or sickness. Core companionship works offline without AI.
 
-**Prototype:** an original animated vector cat and compact settings. Windows development/native smoke verification is available; macOS integrations require verification on a Mac. Builds are unsigned.
+**Prototype:** an original real-time 3D cat with glossy expressive eyes and compact settings. Windows development/native smoke verification is available; macOS integrations require verification on a Mac. Builds are unsigned. The pet requires WebGL 2-capable graphics; failures are reported visibly.
 
 ## Run
 
@@ -15,7 +15,7 @@ npm start
 
 The first launch opens preferences. **Only the pet** lives on the desktop: tap for a scritch, drag to move, or right-click for **Feed**, **Pet**, **Play**, **Home** and **Settings**. Focus the cat and press Enter or Shift+F10 to open the same menu. The tray/menu-bar icon restores Nooki; its menu also opens settings or quits. Closing settings does not quit the companion.
 
-Nooki wanders along the current display's work-area floor. When hungry, they follow the cursor horizontally and can follow it to another display. Energy recovers during naps. **Home** walks to an edge, hides, pauses needs and comments, and unloads optional inference. Reduced motion skips travel and CSS animations. Home state and needs survive relaunch; elapsed time while closed is not charged.
+Nooki wanders along the current display's work-area floor. Nearby, their head and eyes turn toward your cursor and settle when it moves away. When hungry, they follow the cursor horizontally and can follow it to another display. Energy recovers during naps. **Home** walks to an edge, hides, pauses needs and comments, and unloads optional inference. Reduced motion skips travel, gaze and animated reactions; expressions remain. Home state and needs survive relaunch; elapsed time while closed is not charged.
 
 Sometimes Nooki copies your work with a tiny laptop, without inspecting what you are doing. **Stretch those paws** offers an affectionate reminder after 45 minutes of active companion time; home pauses that timer. **Pocket or pounce?** adjusts pet size. **Talkativeness** controls occasional comments, including reminders.
 
@@ -49,7 +49,7 @@ npm run pack
 npm run dist -- --win nsis
 ```
 
-`npm run smoke` opens the actual Electron app briefly and exercises isolated preload/IPC, care, edge-home hiding, needs pause, restore, settings, rejected privileged calls, download consent and persistence. It uses ignored `.smoke-data`, never changes login registration, and never downloads a model. Expected rejected-call errors appear in its output.
+`npm run smoke` opens the actual Electron app briefly and exercises real transparent WebGL rendering, left/right gaze and neutral reset, reduced motion, isolated preload/IPC, care, edge-home hiding, needs pause, restore, settings, rejected privileged calls, download consent and persistence. It uses ignored `.smoke-data`, never changes login registration, and never downloads a model. Expected rejected-call errors appear in its output.
 
 After you have independently consented and downloaded the catalog model into `.smoke-data\models`, `npx electron . --smoke-test --smoke-inference` also exercises the embedded backend. This flag itself does **not** download a model. Do not copy model weights into source control or the installer.
 
@@ -63,7 +63,7 @@ After you have independently consented and downloaded the catalog model into `.s
 | `src/shared/contracts.ts` | Typed snapshot/settings/preload contract |
 | `src/main` | Native windows, tray, IPC, process-name adapter, persistence |
 | `src/main/ai` | Fixed model catalog, verified download/storage, private embedded inference |
-| `src/renderer` | Local-only accessible SVG cat and preference sheet |
+| `src/renderer` | Local-only Three.js cat/pose rig, accessible interactions and preference sheet |
 
 State is validated versioned JSON under Electron's per-user application data directory. Writes are serialized and atomically replaced. Unreadable state is preserved as a timestamped backup and reported in settings. Model files live in its `models` subdirectory; **Remove model** deletes only the catalog's own files.
 

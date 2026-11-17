@@ -76,71 +76,12 @@ progress { display: block; width: 100%; height: 8px; margin: 9px 0; accent-color
 footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 5px 16px; border-top: 1px solid var(--line); margin-top: 27px; padding-top: 15px; font-size: 11px; color: var(--muted); line-height: 1.5; }
 #pet-view { width: 300px; height: 300px; overflow: hidden; position: relative; }
 .speech { position: absolute; z-index: 2; top: 8px; left: 18px; right: 18px; width: fit-content; max-width: 264px; max-height: 67px; overflow: auto; margin: 0 auto; background: #f3f6f1; color: var(--ink); padding: 8px 12px; border: 1px solid #9bae9f; border-radius: 13px 13px 13px 3px; font-size: 12px; line-height: 1.4; text-align: center; box-shadow: 0 3px 6px #263b3120; overflow-wrap: anywhere; }
-.cat { position: absolute; top: 92px; left: 10px; width: 280px; height: 218px; cursor: grab; touch-action: none; user-select: none; border-radius: 45%; }
+.cat { position: absolute; top: 64px; left: 10px; width: 280px; height: 236px; cursor: grab; touch-action: none; user-select: none; border-radius: 45%; }
 .cat:focus-visible { outline-offset: -12px; }
 .cat[data-dragging="true"] { cursor: grabbing; }
 .cat[aria-disabled="true"] { cursor: default; }
-.cat svg { width: 100%; height: 100%; overflow: visible; }
-.ground { fill: #293d3720; }
-.fur { fill: var(--lilac); stroke: #544764; stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
-.tail { stroke-width: 4; }
-.belly { fill: #ede5f4; }
-.ear-inner, .cheek { fill: #e8b7b2; }
-.ear-orange, .patch { fill: var(--orange); }
-.patch { opacity: .9; }
-.forehead, .face-line { stroke: #544764; fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
-.forehead { stroke: #9b87b5; stroke-width: 4; }
-.eye { fill: #393046; }
-.eye-shine { fill: #fff; }
-.nose { fill: #8c5874; }
-.front-paws { stroke-width: 2.5; }
-.eyes-closed, .hungry-mouth, .talk-mouth, .grumpy-brows, .grumpy-mouth, .laptop, .toy, .hearts, .sleep-marks, .home-mark { display: none; }
-.hungry-mouth, .talk-mouth { fill: #805570; }
-.toy circle { fill: #e8ab77; stroke: #795644; stroke-width: 2.5; }
-.toy path { fill: none; stroke: #a26846; stroke-width: 2; }
-.hearts { fill: #be6880; }
-.sleep-marks { fill: #544764; font-size: 22px; font-weight: 700; }
-.home-mark { stroke: #365b48; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; fill: #e4ecdf; }
-.laptop-base { fill: #8ca699; stroke: #3d5a4b; stroke-width: 2; stroke-linejoin: round; }
-.laptop-screen { fill: #526e61; stroke: #314a3c; stroke-width: 2.5; stroke-linejoin: round; }
-.laptop-symbol { fill: none; stroke: #e9eee5; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
-.typing-paw { fill: var(--lilac); stroke: #544764; stroke-width: 2.5; stroke-linejoin: round; }
-.cat[data-mood="purring"] .eyes-open, .cat[data-mood="sleeping"] .eyes-open, .cat[data-mood="home"] .eyes-open { display: none; }
-.cat[data-mood="purring"] .eyes-closed, .cat[data-mood="sleeping"] .eyes-closed, .cat[data-mood="home"] .eyes-closed { display: block; }
-.cat[data-mood="purring"] .hearts, .cat[data-mood="playing"] .toy, .cat[data-mood="sleeping"] .sleep-marks, .cat[data-mood="home"] .home-mark { display: block; }
-.cat[data-mood="hungry"] .hungry-mouth { display: block; }
-.cat[data-mood="hungry"] .mouth { display: none; }
-.cat[data-mood="sleeping"] .head { transform: translateY(9px); }
-.cat:is([data-mood="walking"], [data-moving="true"]:not([data-mood="irritated"], [data-mood="mimicking"], [data-mood="sleeping"])) :is(.paw-left, .paw-right) { animation: stride 540ms ease-in-out infinite alternate; transform-box: fill-box; transform-origin: center top; }
-.cat:is([data-mood="walking"], [data-moving="true"]:not([data-mood="irritated"], [data-mood="mimicking"], [data-mood="sleeping"])) .paw-right { animation-delay: -540ms; }
-.cat:is([data-mood="walking"], [data-moving="true"]:not([data-mood="irritated"], [data-mood="mimicking"], [data-mood="sleeping"])) .back-paw { animation: back-stride 540ms ease-in-out infinite alternate; }
-.cat:is([data-mood="walking"], [data-moving="true"]:not([data-mood="irritated"], [data-mood="mimicking"], [data-mood="sleeping"])) .back-paw:nth-of-type(even) { animation-delay: -540ms; }
-.cat:is([data-mood="walking"], [data-moving="true"]:not([data-mood="irritated"], [data-mood="mimicking"], [data-mood="sleeping"])) .head { animation: walk-bob 540ms ease-in-out infinite alternate; }
-.cat[data-mood="mimicking"] .laptop { display: block; }
-.cat[data-mood="mimicking"] .front-paws { visibility: hidden; }
-.cat[data-mood="mimicking"] .typing-paw { animation: typing 240ms ease-in-out infinite alternate; }
-.cat[data-mood="mimicking"] .typing-right { animation-delay: -240ms; }
-.cat[data-mood="mimicking"] .head { animation: typing-nod 1.2s ease-in-out infinite alternate; transform-origin: 140px 120px; }
-.cat[data-mood="irritated"] .grumpy-brows, .cat[data-mood="irritated"] .grumpy-mouth { display: block; }
-.cat[data-mood="irritated"] .mouth { display: none; }
-.cat[data-mood="irritated"] .tail { animation: tail-flick 450ms ease-in-out infinite alternate; transform-origin: 188px 160px; }
-.cat[data-mood="irritated"] .paw-right { animation: stomp 650ms ease-out infinite; }
-.cat[data-mood="irritated"] .head { transform: rotate(-4deg); transform-origin: 140px 130px; }
-.cat[data-speaking="true"] .mouth, .cat[data-speaking="true"] .hungry-mouth, .cat[data-speaking="true"] .grumpy-mouth { display: none; }
-.cat[data-speaking="true"] .talk-mouth { display: block; animation: talking 340ms ease-in-out infinite alternate; transform-origin: 141px 124px; }
-.cat[data-mood="playing"] .toy { animation: toy 750ms ease-out infinite alternate; }
-.cat[data-mood="purring"] .hearts { animation: affection 1.4s ease-out infinite; }
+#pet-canvas { display: block; width: 100%; height: 100%; background: transparent; }
 .pet-error { position: absolute; z-index: 4; left: 12px; right: 12px; bottom: 8px; max-height: 78px; overflow: auto; background: #fff0ec; color: #842e2d; border: 1px solid #c8978d; border-radius: 7px; padding: 8px; font-size: 11px; line-height: 1.4; margin: 0; overflow-wrap: anywhere; }
-@keyframes stride { from { transform: rotate(-9deg) translateY(-2px); } to { transform: rotate(9deg) translateY(1px); } }
-@keyframes back-stride { to { transform: translate(-2px, -2px); } }
-@keyframes walk-bob { to { transform: translateY(-2px); } }
-@keyframes typing { to { transform: translateY(4px); } }
-@keyframes typing-nod { to { transform: rotate(2deg) translateY(1px); } }
-@keyframes tail-flick { from { transform: rotate(-12deg); } to { transform: rotate(13deg); } }
-@keyframes stomp { 0%, 65%, 100% { transform: translateY(0); } 40% { transform: translateY(-7px); } 60% { transform: translateY(2px); } }
-@keyframes talking { from { transform: scaleY(.35); } to { transform: scaleY(1.25); } }
-@keyframes toy { to { transform: translate(-9px, -7px) rotate(-8deg); } }
-@keyframes affection { from { opacity: .65; } to { transform: translateY(-4px); opacity: 1; } }
 body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after { animation: none !important; transition: none !important; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 @media (max-width: 480px) { .settings { padding: 22px 18px; } .settings-header { gap: 12px; } .settings-header button { white-space: normal; max-width: 140px; } .save-bar { align-items: flex-start; } .setting-row { gap: 14px; } }

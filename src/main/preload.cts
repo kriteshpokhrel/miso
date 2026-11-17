@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { NookiApi, Snapshot } from '../shared/contracts.js';
+import type { Attention, NookiApi, Snapshot } from '../shared/contracts.js';
 
 const api: NookiApi = {
   getSnapshot: () => ipcRenderer.invoke('nooki:snapshot'),
@@ -19,6 +19,11 @@ const api: NookiApi = {
     const handler = (_event: Electron.IpcRendererEvent, snapshot: Snapshot): void => listener(snapshot);
     ipcRenderer.on('nooki:snapshot', handler);
     return () => { ipcRenderer.removeListener('nooki:snapshot', handler); };
+  },
+  onAttention: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, attention: Attention): void => listener(attention);
+    ipcRenderer.on('nooki:attention', handler);
+    return () => { ipcRenderer.removeListener('nooki:attention', handler); };
   },
 };
 contextBridge.exposeInMainWorld('nooki', Object.freeze(api));

@@ -55,6 +55,13 @@ export interface Snapshot {
   platform: string;
   packaged: boolean;
   moving: boolean;
+  attention: Attention;
+}
+
+export interface Attention {
+  x: number;
+  y: number;
+  nearby: boolean;
 }
 
 export interface NookiApi {
@@ -72,6 +79,7 @@ export interface NookiApi {
   endDrag(): Promise<void>;
   openPetMenu(): Promise<void>;
   onSnapshot(listener: (snapshot: Snapshot) => void): () => void;
+  onAttention(listener: (attention: Attention) => void): () => void;
 }
 
 export const DEFAULT_SETTINGS: Settings = {

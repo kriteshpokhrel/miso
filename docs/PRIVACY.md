@@ -28,9 +28,11 @@ Hugging Face/file delivery hosts receive your IP address and ordinary HTTP downl
 
 ## Inference and licensing
 
-`node-llama-cpp` embeds llama.cpp and ships native platform binaries. Runtime uses `build: 'never'`, `skipDownload: true` and CPU mode: no opportunistic compiler, source or binary download. Check upstream `node-llama-cpp`, llama.cpp, Electron and packaged dependencies' notices before distribution. The project's MIT license does not relicense dependencies or the Apache-2.0 model.
+`node-llama-cpp` embeds llama.cpp and ships native platform binaries. Runtime uses `build: 'never'`, `skipDownload: true` and CPU mode: no opportunistic compiler, source or binary download. Check upstream `node-llama-cpp`, llama.cpp, Electron and packaged dependencies' notices before distribution. The procedural 3D renderer bundles MIT-licensed Three.js with its notice in `dist/renderer/THIRD_PARTY_NOTICES.txt`; the original character uses no third-party art. The project's MIT license does not relicense dependencies or the Apache-2.0 model.
 
 Two CPU threads, 512-token context, 64-token batch and 48-token output cap favor a small resource budget, not high-quality reasoning. At least 512 MiB free RAM is required before loading; Electron and native contexts consume additional memory. Downloads require at least the model's size in available disk space. Failed writes are surfaced. There is no GPU dependency.
+
+The **pet's 3D graphics**, unlike inference, require a WebGL 2-capable graphics context. Rendering requests low power, caps draw rate at 30fps and pixel ratio at 2, and stops its animation loop while hidden or in reduced-motion mode. Settings do not initialize 3D graphics. GPU/driver compatibility and sustained CPU/GPU/memory use must be evaluated on target machines; these caps are not a measured battery-life guarantee.
 
 Inference times out cooperatively after 12 seconds; native operations and cleanup are not a hard real-time deadline. Home/disable/quit abort in-flight work and release resources. Core behavior continues during loading and errors. The model unloads after each request rather than retaining RAM/history. Small-model output is not reliable factual advice, and repeated/invalid text is rejected in favor of scripted behavior.
 
@@ -38,6 +40,6 @@ Inference times out cooperatively after 12 seconds; native operations and cleanu
 
 Normal state lives under Electron's `userData` directory (`%APPDATA%\nooki` on Windows by default, `~/Library/Application Support/nooki` on macOS; product name/runtime may affect casing). It contains needs, home state, preferences, a local active-companion timer for break reminders, disturbance state, and allowlisted application names. It does not contain app-usage logs, model conversation history or telemetry identifiers.
 
-Dragging moves only Nooki's own window. Main reads cursor position only for movement/following, never records a pointer history, and retains only a fading disturbance scalar for playful reactions. Imitation uses a timer, not activity capture. Break reminders use companion-active time, not keyboard monitoring. Jokes about other applications have no corresponding control or close API.
+Dragging moves only Nooki's own window. Main reads cursor position for movement/following and nearby head/eye attention. The gaze bridge sends only bounded normalized direction, never raw global coordinates, at most 10Hz; it neutralizes while home, hidden, asleep, dragging or reduced-motion enabled. Gaze is transient: never saved, logged, sent over the network or included in AI prompts. No pointer history is recorded; only a fading disturbance scalar is retained for playful reactions. Imitation uses a timer, not activity capture. Break reminders use companion-active time, not keyboard monitoring. Jokes about other applications have no corresponding control or close API.
 
 Use **Remove model** in settings to disable AI and remove its fixed local model/partial paths. Uninstallers may preserve per-user settings; remove the Nooki application-data directory manually only after quitting if you want to erase preferences. Do not delete shared system or parent directories.

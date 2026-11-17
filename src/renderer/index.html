@@ -1,10 +1,10 @@
 <!doctype html>
 <!--
 THESIS: A little companion, not another dashboard. The cat owns the desktop; settings stay practical.
-OWN-WORLD: Sage paper, slate ink, lilac fur and an apricot ear; soft drawn contours beside crisp system controls.
+OWN-WORLD: Sage paper, slate ink, sculpted lilac fur, an apricot ear and glossy violet eyes beside crisp system controls.
 STORY: Meet Nooki, offer a little care, then choose how quietly they keep you company. Local AI is an explicit extra.
 FIRST VIEWPORT: Only a full-bodied cat on a transparent 300px stage, with occasional speech above. Tap to pet, drag to move, or open native care options. Settings explain the gestures and keep playful labels clear.
-FORM: Approved compact utility sheet and original vector character; user-pinned direction, no randomized staging.
+FORM: Approved compact utility sheet and original real-time 3D character; user-pinned direction, no borrowed mascot.
 -->
 <html lang="en">
   <head>
@@ -14,62 +14,17 @@ FORM: Approved compact utility sheet and original vector character; user-pinned 
     <title>Nooki</title>
     <link rel="stylesheet" href="./styles.css">
     <script defer src="./index.js"></script>
+    <script defer src="./pet.js"></script>
   </head>
   <body>
     <main id="pet-view" hidden aria-label="Nooki desktop companion">
       <p id="speech" class="speech" role="status" aria-live="polite" hidden></p>
       <p id="pet-instructions" class="sr-only">Tap to pet. Drag to move. Right-click, Enter, Shift+F10 or the Menu key opens care and settings.</p>
       <div id="cat" class="cat" data-mood="idle" role="button" tabindex="0" aria-haspopup="menu" aria-describedby="pet-instructions" aria-label="Nooki, a lilac cat, is resting. Open care menu.">
-        <svg viewBox="0 0 280 218" aria-hidden="true">
-          <ellipse class="ground" cx="141" cy="199" rx="74" ry="8"/>
-          <g class="cat-drawing">
-            <path class="tail fur" d="M183 169C218 179 242 159 231 139C225 128 211 137 220 145C229 155 206 160 188 150" />
-            <path class="body fur" d="M99 123C80 144 77 179 91 190C109 204 173 204 191 187C204 174 189 138 172 123Z"/>
-            <path class="belly" d="M117 149C105 163 106 187 121 191H159C176 181 169 154 158 148Z"/>
-            <path class="back-paw fur" d="M95 182C77 180 72 192 83 198H116C120 187 111 181 95 182Z"/>
-            <path class="back-paw fur" d="M180 181C197 180 204 193 193 198H161C157 189 165 182 180 181Z"/>
-            <g class="head">
-              <path class="fur" d="M78 83C68 61 66 27 77 20C85 15 107 34 119 43C134 39 150 39 165 43C179 31 200 16 208 23C218 33 207 67 202 84C222 120 195 151 141 153C86 154 60 124 78 83Z"/>
-              <path class="ear-inner" d="M82 34L88 67L108 51Z"/>
-              <path class="ear-orange" d="M199 37L173 53L197 67Z"/>
-              <path class="patch" d="M169 44C180 33 200 18 208 23C215 31 211 53 205 70C186 74 173 64 169 44Z"/>
-              <path class="forehead" d="M130 48L133 60M145 47L144 59" />
-              <ellipse class="cheek" cx="101" cy="112" rx="13" ry="7"/>
-              <ellipse class="cheek" cx="180" cy="112" rx="13" ry="7"/>
-              <g class="eyes-open">
-                <ellipse class="eye" cx="111" cy="96" rx="5" ry="8"/>
-                <ellipse class="eye" cx="170" cy="96" rx="5" ry="8"/>
-                <circle class="eye-shine" cx="112" cy="93" r="1.7"/>
-                <circle class="eye-shine" cx="171" cy="93" r="1.7"/>
-              </g>
-              <g class="eyes-closed face-line"><path d="M103 99Q111 90 119 99M162 99Q170 90 178 99"/></g>
-              <path class="nose" d="M134 109Q141 105 148 109L141 115Z"/>
-              <path class="mouth face-line" d="M141 115V120M129 120Q134 127 141 120Q148 127 153 120"/>
-              <ellipse class="hungry-mouth" cx="141" cy="123" rx="6" ry="5"/>
-              <ellipse class="talk-mouth" cx="141" cy="124" rx="6" ry="4"/>
-              <path class="grumpy-brows face-line" d="M101 82L120 89M161 89L180 82"/>
-              <path class="grumpy-mouth face-line" d="M131 126Q141 118 151 126"/>
-              <path class="whiskers face-line" d="M91 111L69 106M91 119L68 122M190 111L211 106M190 119L213 123"/>
-            </g>
-            <g class="front-paws fur">
-              <path class="paw-left" d="M116 163L113 187Q113 197 124 197Q134 197 134 188L136 168"/>
-              <path class="paw-right" d="M149 168L150 188Q150 198 160 197Q171 197 169 187L166 163"/>
-            </g>
-            <g class="laptop">
-              <path class="laptop-base" d="M92 198H190L200 207H83Z"/>
-              <path class="laptop-screen" d="M102 164H180L185 198H97Z"/>
-              <path class="laptop-symbol" d="M133 179L139 184L133 189M146 189H155"/>
-              <path class="typing-paw typing-left" d="M110 158Q103 154 102 161L107 173Q112 180 119 173L126 165"/>
-              <path class="typing-paw typing-right" d="M158 165L164 173Q171 180 176 172L181 162Q180 155 174 158"/>
-            </g>
-            <g class="toy"><circle cx="212" cy="188" r="13"/><path d="M203 179Q217 184 218 198M199 190Q213 188 223 181"/></g>
-            <g class="hearts"><path d="M222 70C209 59 218 48 225 56C235 47 242 62 222 70Z"/><path d="M57 91C47 83 54 74 60 80C68 73 74 84 57 91Z"/></g>
-            <g class="sleep-marks"><text x="208" y="75">z</text><text x="228" y="55">z</text></g>
-            <g class="home-mark"><path d="M217 104L234 90L251 104M223 100V123H245V100M231 123V111H238V123"/></g>
-          </g>
-        </svg>
+        <canvas id="pet-canvas" aria-hidden="true"></canvas>
       </div>
       <p id="pet-error" class="pet-error" role="alert" hidden></p>
+      <p id="pet-render-error" class="pet-error" role="alert" hidden></p>
     </main>
     <main id="settings-view" class="settings" hidden>
       <header class="settings-header">

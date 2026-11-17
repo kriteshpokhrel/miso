@@ -61,6 +61,7 @@ function state(): Snapshot {
     model: { phase: 'not-installed', downloadedBytes: 0, totalBytes: 100 },
     modelInfo: { id: 'test', name: 'Test local model', sizeBytes: 100, license: 'Test license', licenseUrl: 'https://example.invalid/license', sourceUrl: 'https://example.invalid/model', resourceNote: 'Test resource disclosure' },
     comment: null, error: null, platform: 'win32', packaged: false, moving: false,
+    attention: { x: 0, y: 0, nearby: false },
   };
 }
 
@@ -94,6 +95,7 @@ function mount(overrides: Partial<NookiApi> = {}, settingsView = true) {
     endDrag: async () => {},
     openPetMenu: async () => {},
     onSnapshot: handler => { listener = handler; return () => {}; },
+    onAttention: () => () => {},
     ...overrides,
   };
   runInNewContext(source, {

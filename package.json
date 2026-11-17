@@ -11,7 +11,7 @@
   "main": "dist/main/index.js",
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json && esbuild src/renderer/index.ts --bundle --format=iife --platform=browser --outfile=dist/renderer/index.js && node scripts/copy-assets.mjs",
+    "build": "tsc -p tsconfig.json && esbuild src/renderer/index.ts src/renderer/pet.ts --bundle --minify --format=iife --platform=browser --outdir=dist/renderer && node scripts/copy-assets.mjs",
     "start": "npm run build && electron .",
     "test": "tsx --test src/domain/*.test.ts src/main/*.test.ts src/main/ai/*.test.ts src/renderer/*.test.ts",
     "typecheck": "tsc --noEmit",
@@ -24,10 +24,12 @@
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
+    "@types/three": "0.187.0",
     "electron": "45.3.3",
     "electron-builder": "26.18.0",
     "esbuild": "^0.25.0",
     "tsx": "^4.19.0",
+    "three": "0.187.0",
     "typescript": "^5.8.0"
   },
   "build": {

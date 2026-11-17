@@ -1,0 +1,178 @@
+<!doctype html>
+<!--
+THESIS: A little companion, not another dashboard. The cat owns the desktop; settings stay practical.
+OWN-WORLD: Sage paper, slate ink, sculpted lilac fur, an apricot ear and glossy violet eyes beside crisp system controls.
+STORY: Meet Miso, offer a little care, then choose how quietly they keep you company. Local AI is an explicit extra.
+FIRST VIEWPORT: Only a full-bodied pet on a transparent stage, with independent readable speech and an eight-action upper care arc. Settings use quiet sidebar selection, a compact coat editor and opt-in app checkboxes.
+FORM: Approved compact utility sheet and original real-time 3D character; user-pinned direction, no borrowed mascot.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+    <title>Miso</title>
+    <link rel="stylesheet" href="./styles.css">
+    <script defer src="./index.js"></script>
+    <script defer src="./pet.js"></script>
+  </head>
+  <body>
+    <main id="pet-view" hidden aria-label="Miso desktop companion">
+      <p id="pet-instructions" class="sr-only">Tap to pet. Drag to move. Right-click, Enter, Shift+F10 or the Menu key opens care and settings.</p>
+      <div id="cat" class="cat" data-mood="idle" role="button" tabindex="0" aria-haspopup="menu" aria-expanded="false" aria-controls="pet-menu" aria-describedby="pet-instructions" aria-label="Miso, a cat, is resting. Open care menu.">
+        <canvas id="pet-canvas" aria-hidden="true"></canvas>
+      </div>
+      <p id="pet-error" class="pet-error" role="alert" hidden></p>
+      <p id="pet-render-error" class="pet-error" role="alert" hidden></p>
+    </main>
+    <main id="care-view" hidden aria-label="Miso care">
+      <nav id="pet-menu" class="pet-orbit" role="menu" aria-label="Care for Miso" hidden>
+        <button id="care-feed" type="button" role="menuitem" aria-label="Feed Miso" title="Feed"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11h18l-3 8H6zM8 7l1-3m6 3 1-3M2 20h20"/></svg><span>Feed</span></button>
+        <button id="care-pet" type="button" role="menuitem" aria-label="Give Miso scritches"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 12V6a2 2 0 0 1 4 0v5-7a2 2 0 0 1 4 0v7-4a2 2 0 0 1 4 0v8c0 4-2 7-6 7h-2c-2 0-3-1-4-3l-5-6a2 2 0 0 1 3-3l2 2"/></svg><span id="pet-action-label">Scritches</span></button>
+        <button id="care-play" type="button" role="menuitem" aria-label="Play with Miso" title="Play"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M5 6c9 0 13 5 13 12M4 16c3-7 9-11 15-10M8 21c-1-8 3-14 8-17"/></svg><span>Play</span></button>
+        <button id="care-sleep" type="button" role="menuitem" aria-label="Let Miso sleep" title="Sleep"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15a9 9 0 0 1-11-11 9 9 0 1 0 11 11ZM16 3h5l-5 5h5"/></svg><span id="sleep-action-label">Sleep</span></button>
+        <button id="care-stay" type="button" role="menuitem" aria-label="Keep Miso here"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s7-7 7-14a7 7 0 0 0-14 0c0 7 7 14 7 14Z"/><circle cx="12" cy="8" r="2"/></svg><span id="stay-action-label">Stay</span></button>
+        <button id="care-follow" type="button" role="menuitemcheckbox" aria-checked="false" aria-label="Follow the active window"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="15" rx="2"/><path d="M3 8h18m-12 5h7m-3-3 3 3-3 3"/></svg><span>Follow</span></button>
+        <button id="care-home" type="button" role="menuitem" aria-label="Send Miso home" title="Home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m2 11 10-9 10 9M5 9v12h14V9M9 21v-8h6v8"/></svg><span>Home</span></button>
+        <button id="care-settings" type="button" role="menuitem" aria-label="Open Miso settings" title="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 3 1-2h4l1 2 3 2 3 1v4l-2 2 1 3-1 3-3 1-2 3h-4l-2-3-3-1-1-3 1-3-2-2V6l3-1z" transform="translate(1 1) scale(.9)"/><circle cx="12" cy="12" r="3"/></svg><span>Settings</span></button>
+      </nav>
+      <p id="care-error" class="pet-error" role="alert" hidden></p>
+    </main>
+    <main id="speech-view" hidden aria-label="Miso says"><p id="speech" class="speech" role="status" aria-live="polite" hidden></p><p id="speech-error" class="pet-error" role="alert" hidden></p></main>
+    <main id="settings-view" class="settings" hidden>
+      <header class="settings-header">
+        <div><h1>Miso<span class="name-dot" aria-hidden="true">.</span></h1><p>A little company. On your terms.</p></div>
+        <button id="restore-button" type="button" class="secondary">Bring Miso back</button>
+      </header>
+      <div class="presence"><span class="presence-dot" aria-hidden="true"></span><p id="presence-text" role="status">Getting to know Miso…</p><span id="mode-label">Scripted companion</span></div>
+      <nav class="settings-pages" aria-label="Settings pages">
+        <button id="coat-page" type="button" class="secondary" aria-pressed="true" aria-controls="coat-panel">Pets</button>
+        <button id="company-page" type="button" class="secondary" aria-pressed="false" aria-controls="company-panel">General</button>
+      </nav>
+      <p id="gesture-hint" class="gesture-hint">Tap for affection. Drag to carry. Right-click for care. Tap a sleeping pet to wake up.</p>
+      <p id="settings-error" class="notice error" role="alert" hidden></p>
+      <form id="settings-form" novalidate>
+        <div id="company-panel" hidden>
+        <section aria-labelledby="everyday-heading">
+          <h2 id="everyday-heading">At your service</h2>
+          <div class="setting-row">
+            <div><label for="launch-at-login">Morning pounce</label><p id="login-note">Launch at sign-in, ready to keep you company.</p></div>
+            <input id="launch-at-login" type="checkbox" aria-describedby="login-note">
+          </div>
+        </section>
+        <section aria-labelledby="privacy-heading">
+          <h2 id="privacy-heading">Apps Miso may recognize</h2>
+          <p>Choose app names for optional local comments. Never window titles or contents. Nothing is selected by default.</p>
+          <fieldset class="app-presets" aria-label="Allow app names">
+            <label><input id="app-chrome" type="checkbox">Chrome</label>
+            <label><input id="app-code" type="checkbox">Visual Studio Code</label>
+            <label><input id="app-outlook" type="checkbox">Outlook</label>
+            <label><input id="app-edge" type="checkbox">Edge</label>
+            <label><input id="app-firefox" type="checkbox">Firefox</label>
+            <label><input id="app-slack" type="checkbox">Slack</label>
+            <label><input id="app-teams" type="checkbox">Teams</label>
+            <label><input id="app-terminal" type="checkbox">Terminal</label>
+            <label><input id="app-idea" type="checkbox">IntelliJ IDEA</label>
+            <label><input id="app-github" type="checkbox">GitHub Desktop</label>
+          </fieldset>
+          <details id="custom-apps" class="custom-apps"><summary>Add another app by process name</summary>
+            <label for="allowed-apps" class="field-label">Other apps</label>
+            <p id="apps-hint" class="field-hint">One process name per line, not a file path. Up to 30 names total, 80 characters each.</p>
+            <textarea id="allowed-apps" rows="3" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="devenv.exe&#10;Safari" aria-describedby="apps-hint apps-error"></textarea>
+            <p id="apps-error" class="field-error" hidden></p>
+          </details>
+          <div class="setting-row ai-row">
+            <div><label for="ai-enabled">Use local AI for comments</label><p id="ai-note">Off by default. Requires the optional model below.</p></div>
+            <input id="ai-enabled" type="checkbox" aria-describedby="ai-note">
+          </div>
+        </section>
+        </div>
+        <section id="coat-panel" aria-labelledby="coat-heading">
+          <h2 id="coat-heading">Choose your companion</h2>
+          <div class="selected-pet">
+            <div id="pet-species" role="radiogroup" aria-labelledby="coat-heading" aria-describedby="species-personality"></div>
+            <p id="species-personality" class="field-hint">Affectionate. Playful. A little mischievous.</p>
+          </div>
+          <div class="coat-editor">
+            <figure class="coat-preview">
+              <div class="coat-stage"><canvas id="coat-preview" role="img" aria-label="Live 3D preview of Miso’s coat"></canvas></div>
+              <figcaption>Preview · changes apply when saved</figcaption>
+            </figure>
+            <div class="coat-fields">
+              <label for="coat-pattern" class="field-label">A little contrast?</label>
+              <select id="coat-pattern" aria-describedby="coat-pattern-note"><option value="single">Single tone</option><option value="dual">Dual tone</option></select>
+              <p id="coat-pattern-note" class="field-hint">One color, or a little contrast.</p>
+              <div class="coat-color-row">
+                <div><label for="coat-color">Coat color</label><output id="coat-color-value" for="coat-color"></output></div>
+                <input id="coat-color" type="color" aria-describedby="coat-color-value" value="#bda6df">
+              </div>
+              <div class="coat-color-row">
+                <div><label for="accent-color">Contrast color</label><output id="accent-color-value" for="accent-color"></output></div>
+                <input id="accent-color" type="color" aria-describedby="accent-color-value accent-note" value="#fff0d9">
+              </div>
+              <p id="accent-note" class="sr-only">Your contrast color is kept when you switch to single tone.</p>
+              <button id="revert-coat" type="button" class="secondary" disabled>Revert coat edits</button>
+            </div>
+          </div>
+          <p id="coat-preview-error" class="notice error" role="alert" hidden></p>
+          <fieldset class="coat-palettes">
+            <legend>A few good pairings</legend>
+            <div class="coat-palette-options">
+              <button id="palette-lilac" type="button" class="coat-preset secondary" aria-pressed="false" disabled>Lilac cream</button>
+              <button id="palette-cocoa" type="button" class="coat-preset secondary" aria-pressed="false" disabled>Cocoa cream</button>
+              <button id="palette-peach" type="button" class="coat-preset secondary" aria-pressed="false" disabled>Peach milk</button>
+              <button id="palette-cloud" type="button" class="coat-preset secondary" aria-pressed="false" disabled>Storm cloud</button>
+            </div>
+          </fieldset>
+          <h2 class="behavior-heading">A little personality</h2>
+          <div class="setting-row">
+            <div><label for="pet-size">Pocket or pounce?</label><p id="size-note">Size on your desktop.</p></div>
+            <select id="pet-size" aria-describedby="size-note"><option value="0.5">Tiny · 50%</option><option value="0.6">Mini · 60%</option><option value="0.7">Pocket · 70%</option><option value="0.8">Little · 80%</option><option value="0.9">Cozy · 90%</option><option value="1">Just right · 100%</option><option value="1.3">Big paws · 130%</option><option value="1.5">Full pounce · 150%</option></select>
+          </div>
+          <div class="setting-row">
+            <div><label for="motion-level">Paw pace</label><p id="motion-note">Still pauses motion. Gentle strolls occasionally. Lively explores more.</p></div>
+            <select id="motion-level" aria-describedby="motion-note system-motion-note"><option value="still">Still</option><option value="gentle">Gentle</option><option value="lively">Lively</option></select>
+          </div>
+          <p id="system-motion-note" class="field-hint" hidden>Motion is paused by your system's reduced-motion preference.</p>
+          <div class="setting-row">
+            <div><label for="follow-window">A window seat</label><p id="window-follow-note">Stroll along the active window's top edge when there is room above it.</p><p id="window-follow-status" role="status"></p></div>
+            <input id="follow-window" type="checkbox" aria-describedby="window-follow-note window-follow-status">
+          </div>
+          <div class="setting-row">
+            <div><label for="stay-put">Stay, please</label><p id="stay-note">Keep this position. Animations stay on; you can still carry your pet.</p></div>
+            <input id="stay-put" type="checkbox" aria-describedby="stay-note">
+          </div>
+          <div class="setting-row">
+            <div><label for="comment-frequency">Talkativeness</label><p id="frequency-note">Care reactions work even with comments off.</p></div>
+            <select id="comment-frequency" aria-describedby="frequency-note"><option value="off">Comments off</option><option value="quiet">Quiet</option><option value="balanced">Balanced</option><option value="chatty">Chatty</option></select>
+          </div>
+          <div class="setting-row">
+            <div><label for="break-reminders">Stretch those paws</label><p id="break-note">A loving reminder after 45 minutes together. Paused at home.</p></div>
+            <input id="break-reminders" type="checkbox" aria-describedby="break-note">
+          </div>
+        </section>
+      <section id="model-section" class="model-section" aria-labelledby="model-heading" hidden>
+        <div class="section-title"><h2 id="model-heading">Optional local model</h2>
+        <details id="model-details" class="model-details">
+        <summary aria-label="Model details" title="Model details"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/></svg></summary>
+        <div class="model-details-panel">
+        <dl class="model-facts">
+          <div><dt>Model</dt><dd id="model-name">Checking model details…</dd></div>
+          <div><dt>License</dt><dd><span id="model-license">—</span><span id="model-license-url" class="source-text"></span></dd></div>
+          <div><dt>Source</dt><dd id="model-source" class="source-text">—</dd></div>
+        </dl>
+        <p id="model-resources" class="resource-note"></p>
+        </div></details><span id="model-phase" class="phase">Checking…</span></div>
+        <p>For extra conversation. Care and companionship work without it.</p>
+        <p id="model-size" class="field-hint">Checking download size…</p>
+        <div id="model-progress-area" hidden><label id="progress-label" for="model-progress">Download progress</label><progress id="model-progress" max="100" value="0"></progress><p id="progress-text" class="field-hint" role="status"></p></div>
+        <p id="model-error" class="notice error" role="alert" hidden></p>
+        <label id="consent-label" class="consent"><input id="download-consent" type="checkbox"><span>I agree to download and store this optional model on this device.</span></label>
+        <div class="model-actions"><button id="download-button" type="button" disabled>Download model</button><button id="cancel-download-button" type="button" class="secondary" hidden>Cancel download</button><button id="remove-model-button" type="button" class="secondary" hidden>Remove model</button><span id="model-action-status" role="status"></span></div>
+      </section>
+        <div class="save-bar"><p id="save-status" role="status" aria-live="polite">Your preferences stay on this device.</p><button id="save-button" type="submit" disabled>Save preferences</button></div>
+      </form>
+      <footer>No accounts. No telemetry. Just company.<span>Miso · desktop prototype</span></footer>
+    </main>
+  </body>
+</html>

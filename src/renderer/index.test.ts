@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import { buildSync } from 'esbuild';
-import type { NookiApi, Settings, Snapshot } from '../shared/contracts.js';
+import type { MisoApi, Settings, Snapshot } from '../shared/contracts.js';
 import { DEFAULT_SETTINGS, IDLE_MOTION } from '../shared/contracts.js';
 
 interface ControlEvent {
@@ -18,6 +18,7 @@ interface ControlEvent {
   shiftKey: boolean;
   repeat: boolean;
   detail: number;
+  composedPath(): Control[];
 }
 
 class Control {
@@ -28,18 +29,21 @@ class Control {
   disabled = false;
   hidden = false;
   focused = false;
+  id = '';
+  tabIndex = -1;
   dataset: Record<string, string> = {};
   attributes: Record<string, string> = {};
   children: Control[] = [];
   classList = { toggle: () => {} };
-  style = { setProperty: (_name: string, _value: string) => {} };
+  styles: Record<string, string> = {};
+  style = { setProperty: (name: string, value: string) => { this.styles[name] = value; } };
   captured = new Set<number>();
   listeners = new Map<string, Array<(event: ControlEvent) => void>>();
   addEventListener(name: string, handler: (event: ControlEvent) => void): void {
     this.listeners.set(name, [...(this.listeners.get(name) || []), handler]);
   }
   dispatch(name: string, values: Partial<ControlEvent> = {}): void {
-    const event: ControlEvent = { preventDefault() {}, pointerId: 1, button: 0, isPrimary: true, screenX: 100, screenY: 100, key: '', shiftKey: false, repeat: false, detail: 1, ...values };
+    const event: ControlEvent = { preventDefault() {}, composedPath: () => [], pointerId: 1, button: 0, isPrimary: true, screenX: 100, screenY: 100, key: '', shiftKey: false, repeat: false, detail: 1, ...values };
     for (const listener of this.listeners.get(name) || []) listener(event);
   }
   querySelectorAll(): Control[] { return this.children; }
@@ -66,31 +70,37 @@ function state(): Snapshot {
     model: { phase: 'not-installed', downloadedBytes: 0, totalBytes: 100 },
     modelInfo: { id: 'test', name: 'Test local model', sizeBytes: 100, license: 'Test license', licenseUrl: 'https://example.invalid/license', sourceUrl: 'https://example.invalid/model', resourceNote: 'Test resource disclosure' },
     comment: null, error: null, platform: 'win32', packaged: false, moving: false,
+    careMenuOpen: false, speechBelow: false, speechAnchor: 140,
     attention: { x: 0, y: 0, nearby: false }, motion: { ...IDLE_MOTION }, systemReducedMotion: false, windowFollowing: 'Desktop',
   };
 }
 
 const settle = async (): Promise<void> => { await new Promise(resolve => setImmediate(resolve)); };
 
-function mount(overrides: Partial<NookiApi> = {}, settingsView = true) {
+function mount(overrides: Partial<MisoApi> = {}, settingsView: boolean | 'care' | 'speech' = true) {
+  Control.active = undefined;
   const controls = new Map<string, Control>();
+  const created: Control[] = [];
   for (const match of markup.matchAll(/\bid="([^"]+)"/g)) controls.set(match[1]!, new Control());
   const get = (id: string): Control => {
-    const control = controls.get(id);
+    const control = controls.get(id) || created.find(control => control.id === id);
     assert.ok(control, id);
     return control;
   };
-  get('settings-form').children = ['pet-species', 'launch-at-login', 'comment-frequency', 'motion-level', 'follow-window', 'ai-enabled', 'allowed-apps', 'pet-size', 'break-reminders', 'coat-pattern', 'coat-color', 'accent-color'].map(get);
+  get('settings-form').children = ['launch-at-login', 'comment-frequency', 'motion-level', 'follow-window', 'ai-enabled', 'allowed-apps', 'pet-size', 'break-reminders', 'coat-pattern', 'coat-color', 'accent-color'].map(get);
   let nextSnapshot = state();
   let now = 0;
   let listener: (snapshot: Snapshot) => void = () => {};
   const calls: Settings[] = [];
   const previews: Array<{ snapshot: Snapshot; active: boolean }> = [];
-  const api: NookiApi = {
+  const windowEvents = new Control();
+  const api: MisoApi = {
     getSnapshot: async () => nextSnapshot,
     care: async () => nextSnapshot,
     setSleeping: async () => nextSnapshot,
     setCareMenuOpen: async () => {},
+    setStayPut: async () => nextSnapshot,
+    setFollowing: async () => nextSnapshot,
     goHome: async () => {},
     restore: async () => {},
     openSettings: async () => {},
@@ -107,16 +117,17 @@ function mount(overrides: Partial<NookiApi> = {}, settingsView = true) {
     ...overrides,
   };
   runInNewContext(source, {
-    URLSearchParams, location: { search: settingsView ? '?view=settings' : '' }, performance: { now: () => now },
+    URLSearchParams, location: { search: typeof settingsView === 'string' ? `?view=${settingsView}` : settingsView ? '?view=settings' : '' }, performance: { now: () => now },
     CustomEvent, Option: class extends Control { constructor(label: string, value: string) { super(); this.textContent = label; this.value = value; } },
-    window: { nooki: api, addEventListener() {}, dispatchEvent(event: CustomEvent) { previews.push(event.detail); } },
+    window: { miso: api, innerWidth: 430, addEventListener: windowEvents.addEventListener.bind(windowEvents), dispatchEvent(event: CustomEvent) { previews.push(event.detail); } },
     document: {
       body: new Control(), getElementById: (id: string) => controls.get(id),
+      createElement: () => { const control = new Control(); created.push(control); return control; },
       get activeElement() { return Control.active; },
       querySelectorAll: () => [...controls.values()],
     },
   });
-  return { get, calls, previews, advance(ms: number) { now += ms; }, emit(snapshot: Snapshot) { nextSnapshot = snapshot; listener(snapshot); } };
+  return { get, calls, previews, windowEvents, advance(ms: number) { now += ms; }, emit(snapshot: Snapshot) { nextSnapshot = snapshot; listener(snapshot); } };
 }
 
 test('snapshot updates preserve preference drafts and edits made during save', async () => {
@@ -289,7 +300,7 @@ test('a stationary tap pets and failed care calls report errors without locking 
   assert.equal(ui.get('cat').hasPointerCapture(1), false);
 });
 
-test('speech only displays supplied comments, including a quiet going-home sequence', async () => {
+test('pet window never duplicates native speech even when comments are supplied', async () => {
   const ui = mount({}, false);
   await settle();
   assert.equal(ui.get('speech').hidden, true);
@@ -301,8 +312,8 @@ test('speech only displays supplied comments, including a quiet going-home seque
   assert.equal(ui.get('speech').hidden, true);
   assert.match(ui.get('cat').attributes['aria-label']!, /hungry/);
   ui.emit({ ...quiet, comment: 'A supplied care reaction.' });
-  assert.equal(ui.get('speech').hidden, false);
-  assert.equal(ui.get('speech').textContent, 'A supplied care reaction.');
+  assert.equal(ui.get('speech').hidden, true);
+  assert.equal(ui.get('speech').textContent, '');
   assert.equal(ui.get('cat').dataset.speaking, 'true');
   ui.emit(quiet);
   assert.equal(ui.get('speech').hidden, true);
@@ -336,6 +347,38 @@ test('native movement coexists with the hungry mood and clears when movement sto
   assert.equal(ui.get('cat').dataset.mood, 'hungry');
 });
 
+test('all companion choices preview without saving and survive background snapshots before explicit save', async () => {
+  const ui = mount();
+  await settle();
+  assert.deepEqual(Array.from(ui.get('pet-species').children, option => option.dataset.species), ['cat', 'dog', 'panda', 'octopus']);
+  for (const species of ['dog', 'panda', 'octopus'] as const) {
+    const savedCount = ui.calls.length;
+    ui.get(`choose-${species}`).dispatch('click');
+    ui.emit(state());
+    assert.equal(ui.calls.length, savedCount);
+    assert.equal(ui.get(`choose-${species}`).attributes['aria-checked'], 'true');
+    assert.equal(ui.previews.at(-1)?.snapshot.pet.species, species);
+    assert.match(ui.get('coat-preview').attributes['aria-label']!, new RegExp(species));
+    ui.get('settings-form').dispatch('submit');
+    await settle();
+    assert.equal(ui.calls.at(-1)?.petSpecies, species);
+  }
+});
+
+test('new companions announce species-specific affection rather than feline purring', async () => {
+  const ui = mount({}, false);
+  await settle();
+  for (const [species, reaction] of [['dog', 'wagging'], ['panda', 'cuddle'], ['octopus', 'curling']] as const) {
+    const next = state();
+    next.pet = { ...next.pet, species, mood: 'purring' };
+    ui.emit(next);
+    const label = ui.get('cat').attributes['aria-label']!;
+    assert.match(label, new RegExp(reaction));
+    assert.doesNotMatch(label, /purring/);
+    if (species === 'octopus') assert.match(label, /an octopus/);
+  }
+});
+
 test('pet size and break reminder drafts survive snapshots and save as complete settings', async () => {
   const ui = mount();
   await settle();
@@ -356,25 +399,162 @@ test('pet size and break reminder drafts survive snapshots and save as complete 
   assert.equal(ui.calls[0]!.motionLevel, 'still');
 });
 
-test('right-click and keyboard open radial care icons; Escape closes and restores keyboard focus', async () => {
-  const actions: string[] = [];
-  const ui = mount({ care: async action => { actions.push(action); return state(); } }, false);
+test('pet requests a native menu without showing local controls or dismissing it on pet blur', async () => {
+  const requests: Array<[boolean, boolean | undefined]> = [];
+  const ui = mount({ setCareMenuOpen: async (open, restore) => { requests.push([open, restore]); } }, false);
   await settle();
   ui.get('cat').dispatch('contextmenu');
   await settle();
+  ui.emit({ ...state(), careMenuOpen: true });
+  ui.windowEvents.dispatch('blur');
+  await settle();
+  assert.equal(ui.get('pet-menu').hidden, true);
+  assert.equal(ui.get('cat').attributes['aria-expanded'], 'true');
+  assert.deepEqual(requests, [[true, undefined]]);
+  ui.emit(state());
+  assert.equal(ui.get('cat').attributes['aria-expanded'], 'false');
+});
+
+test('care popup focuses its upper arc, executes care, and Escape requests native focus restoration', async () => {
+  const actions: string[] = [];
+  const requests: Array<[boolean, boolean | undefined]> = [];
+  const ui = mount({ care: async action => { actions.push(action); return state(); },
+    setCareMenuOpen: async (open, restore) => { requests.push([open, restore]); } }, 'care');
+  await settle();
+  ui.emit({ ...state(), careMenuOpen: true });
   assert.equal(ui.get('pet-menu').hidden, false);
+  assert.equal(ui.get('care-feed').focused, true);
   ui.get('care-feed').dispatch('click');
   await settle();
   assert.deepEqual(actions, ['feed']);
   assert.equal(ui.get('pet-menu').hidden, true);
-  ui.get('cat').dispatch('keydown', { key: 'Enter' });
-  await settle();
+  ui.emit({ ...state(), careMenuOpen: true });
   assert.equal(ui.get('care-feed').focused, true);
   ui.get('pet-menu').dispatch('keydown', { key: 'ArrowRight' });
-  assert.equal(ui.get('care-play').focused, true);
+  assert.equal(ui.get('care-pet').focused, true);
   ui.get('pet-menu').dispatch('keydown', { key: 'Escape' });
   assert.equal(ui.get('pet-menu').hidden, true);
-  assert.equal(ui.get('cat').focused, true);
+  assert.deepEqual(requests.at(-1), [false, true]);
+  for (const id of ['feed', 'pet', 'play', 'sleep', 'stay', 'follow', 'home', 'settings']) {
+    const button = ui.get(`care-${id}`);
+    const x = parseFloat(button.styles['--orbit-x']!);
+    const y = parseFloat(button.styles['--orbit-y']!);
+    assert.ok(x >= 22 && x <= 408);
+    assert.ok(y >= 22 && y <= 195.001);
+  }
+});
+
+test('species keyboard selection preserves color drafts and newer choices made during save', async () => {
+  let resolveSave!: (value: Snapshot) => void;
+  let sent!: Settings;
+  const ui = mount({ updateSettings: settings => {
+    sent = settings;
+    return new Promise(resolve => { resolveSave = resolve; });
+  } });
+  await settle();
+  ui.get('palette-cocoa').dispatch('click');
+  ui.get('pet-species').dispatch('keydown', { key: 'End' });
+  assert.equal(ui.get('choose-octopus').attributes['aria-checked'], 'true');
+  assert.equal(ui.get('choose-octopus').tabIndex, 0);
+  assert.equal(ui.get('choose-octopus').focused, true);
+  assert.equal(ui.get('coat-color').value, '#79584f');
+  ui.get('settings-form').dispatch('submit');
+  assert.equal(sent.petSpecies, 'octopus');
+  ui.get('pet-species').dispatch('keydown', { key: 'Home' });
+  ui.get('pet-species').dispatch('keydown', { key: 'ArrowRight' });
+  resolveSave({ ...state(), settings: sent });
+  await settle();
+  assert.equal(ui.get('choose-dog').attributes['aria-checked'], 'true');
+  assert.equal(ui.get('choose-octopus').tabIndex, -1);
+  assert.equal(ui.previews.at(-1)?.snapshot.pet.species, 'dog');
+  assert.equal(ui.get('coat-color').value, '#79584f');
+  assert.equal(ui.get('save-button').disabled, false);
+});
+
+test('speech popup preserves full unbroken comments and follows native arrow anchoring without care controls', async () => {
+  const ui = mount({}, 'speech');
+  await settle();
+  assert.equal(ui.get('speech').hidden, true);
+  const next = { ...state(), comment: 'W'.repeat(72), speechBelow: true, speechAnchor: 24 };
+  ui.emit(next);
+  assert.equal(ui.get('speech').hidden, false);
+  assert.equal(ui.get('speech').textContent, next.comment);
+  assert.equal(ui.get('speech').styles['--speech-anchor'], '24px');
+  assert.equal(ui.get('pet-menu').hidden, true);
+  ui.emit({ ...next, careMenuOpen: true });
+  assert.equal(ui.get('speech').hidden, true);
+  ui.emit(state());
+  assert.equal(ui.get('speech').hidden, true);
+});
+
+test('native dismissal allows the next right-click to reopen and open care blocks pet dragging', async () => {
+  const requests: boolean[] = [];
+  let dragged = false;
+  const ui = mount({ setCareMenuOpen: async open => { requests.push(open); }, startDrag: async () => { dragged = true; } }, false);
+  await settle();
+  ui.get('cat').dispatch('contextmenu');
+  await settle();
+  ui.emit({ ...state(), careMenuOpen: true });
+  ui.get('cat').dispatch('pointerdown');
+  ui.get('cat').dispatch('pointermove', { screenX: 120 });
+  assert.equal(ui.get('cat').hasPointerCapture(1), false);
+  assert.equal(dragged, false);
+  ui.emit(state());
+  ui.get('cat').dispatch('contextmenu');
+  await settle();
+  assert.deepEqual(requests, [true, true]);
+});
+
+test('care restores scritches, stateful roam and following using scoped APIs instead of saving settings', async () => {
+  const stays: boolean[] = [];
+  const follows: boolean[] = [];
+  const actions: string[] = [];
+  const ui = mount({
+    setStayPut: async stay => { stays.push(stay); return state(); },
+    setFollowing: async follow => { follows.push(follow); return state(); },
+    care: async action => { actions.push(action); return state(); },
+  }, 'care');
+  await settle();
+  const open = { ...state(), careMenuOpen: true };
+  ui.emit(open);
+  assert.equal(ui.get('pet-action-label').textContent, 'Scritches');
+  ui.get('care-pet').dispatch('click');
+  await settle();
+  assert.deepEqual(actions, ['pet']);
+  const still = { ...open, settings: { ...open.settings, motionLevel: 'still' as const } };
+  ui.emit(still);
+  assert.equal(ui.get('stay-action-label').textContent, 'Roam');
+  ui.get('care-stay').dispatch('click');
+  await settle();
+  ui.emit(open);
+  assert.equal(ui.get('stay-action-label').textContent, 'Stay');
+  ui.get('care-stay').dispatch('click');
+  await settle();
+  assert.deepEqual(stays, [false, true]);
+  ui.emit(open);
+  assert.equal(ui.get('care-follow').attributes['aria-checked'], 'true');
+  ui.get('care-follow').dispatch('click');
+  await settle();
+  assert.deepEqual(follows, [false]);
+  ui.emit({ ...open, pet: { ...open.pet, species: 'octopus' } });
+  assert.equal(ui.get('pet-action-label').textContent, 'Pats');
+  assert.equal(ui.calls.length, 0);
+  assert.equal(ui.get('speech').hidden, true);
+});
+
+test('care dismisses on outside pointer and native blur', async () => {
+  const requests: boolean[] = [];
+  const ui = mount({ setCareMenuOpen: async open => { requests.push(open); } }, 'care');
+  await settle();
+  ui.emit({ ...state(), careMenuOpen: true });
+  ui.windowEvents.dispatch('pointerdown');
+  await settle();
+  assert.equal(ui.get('pet-menu').hidden, true);
+  ui.emit({ ...state(), careMenuOpen: true });
+  ui.windowEvents.dispatch('blur');
+  await settle();
+  assert.equal(ui.get('pet-menu').hidden, true);
+  assert.deepEqual(requests, [false, false]);
 });
 
 test('app presets remain opt-in and merge with custom names without widening saved aliases', async () => {

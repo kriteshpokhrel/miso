@@ -8,6 +8,8 @@ Manual release first falls vertically onto the current display's work-area floor
 
 The tray provides restore, home, settings and quit. Closing the pet window sends it home. Closing preferences leaves the tray running. Startup registration is applied only by a normal packaged launch and respects the saved toggle. Windows can independently disable startup entries, and sign-in after reboot still needs a manual check.
 
+Care and speech are separate transparent, always-on-top windows at zoom 1, clamped to the pet's display work area. They do not change the scaled pet frame. Speech is non-focusable and ignores mouse input; care dismisses on blur and Escape can restore pet focus. Verify focus, stacking and workspace behavior on each target OS, including while changing display scaling.
+
 Unsigned installers can trigger SmartScreen. Obtain a code-signing certificate for public distribution. Installing the prototype and accepting startup registration should be an explicit user action; automated smoke never registers startup.
 
 ## macOS
@@ -24,12 +26,14 @@ The committed CI workflow checks Windows and macOS dependencies, tests, types an
 
 ## Manual release checklist
 
-- Launch from the installed application, inspect cat/controls and open preferences.
+- Launch from the installed application, inspect each companion/controls and open preferences.
 - Verify idle wandering, hungry cursor-follow, expressions, feed/pet/play and sleep recovery. Sleep must lie down without props and remain on the same display while focus changes elsewhere; tap wakes it.
 - Verify Home walks right, brings in a house, enters it, then slides the house right before hiding; needs/comments pause immediately and inference unloads. Restore through the tray/menu bar; Still/system reduced motion skips animation.
 - Change settings, quit/relaunch, and check persistence. Toggle sign-in launch both ways, inspect OS startup settings, then verify after actual sign-out/reboot.
 - In Pets, use the native color picker, switch single/dual tone, preview without applying, save/relaunch and verify remembered colors. Check sidebar navigation, narrow stacked layout and reachable Save. In General, model details must start collapsed while size and explicit consent remain available.
-- Exercise all three Paw pace levels, continuous four-paw gait/turn/stop with gentle synchronized body movement, a real normal window with room above it, moving/resizing/maximizing/minimizing that window, and fallback/restoration across displays/DPI. Release on another display and confirm local vertical landing precedes following; check connected, disconnected and vertically offset display floors. Shake rapidly and confirm irritation before release, five seconds of anger and separate reassurance. Check eating/ball/scritches, five-action care-menu arrows/Escape/outside dismissal, and Pets-only Stay, please.
+- Exercise all three roaming levels, continuous gait/turn/stop with gentle synchronized body movement, a real normal window with room above it, moving/resizing/maximizing/minimizing that window, and fallback/restoration across displays/DPI. Release on another display and confirm local vertical landing precedes following; check connected, disconnected and vertically offset display floors. Shake rapidly and confirm irritation before release, five seconds of anger and separate reassurance.
+- Check all eight care actions, arrows/Escape/outside dismissal, restored Scritches/Pats, Stay/Roam persistence and Follow. At 50% and 100%, controls and speech must remain readable without moving/resizing the pet. Speech must not intercept clicks or steal focus.
+- Switch Cat/Dog/Panda/Octopus with mouse and radio-group keyboard controls, preview before Save, save/relaunch, and check each model's care/sleep/imitation/Home. Inspect Pets and General at regular and 500x540 window sizes; no field/divider overlap or unreachable Save.
 - Check multiple displays, negative monitor coordinates, display removal, scaling, taskbar/Dock placement and reduced motion.
 - With no model and offline, verify core behavior. With consent, exercise real download, mid-transfer cancel/retry, removal and inference. Ensure an unallowlisted foreground app never reaches inference.
 - Check appearance/focus/keyboard access, comment frequency/off, error visibility, and CPU/RAM while idle/home/inference.

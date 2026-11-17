@@ -1,4 +1,4 @@
-Nooki's bundled 3D renderer includes Three.js and its RoundedBoxGeometry addon.
+Miso's bundled 3D renderer includes Three.js and its RoundedBoxGeometry addon.
 Source: https://github.com/mrdoob/three.js
 
 The MIT License

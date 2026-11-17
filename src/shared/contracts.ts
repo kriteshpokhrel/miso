@@ -76,6 +76,9 @@ export interface Snapshot {
   platform: string;
   packaged: boolean;
   moving: boolean;
+  careMenuOpen: boolean;
+  speechBelow: boolean;
+  speechAnchor: number;
   attention: Attention;
   motion: PetMotion;
   systemReducedMotion: boolean;
@@ -88,11 +91,13 @@ export interface Attention {
   nearby: boolean;
 }
 
-export interface NookiApi {
+export interface MisoApi {
   getSnapshot(): Promise<Snapshot>;
   care(action: CareAction): Promise<Snapshot>;
   setSleeping(asleep: boolean): Promise<Snapshot>;
-  setCareMenuOpen(open: boolean): Promise<void>;
+  setCareMenuOpen(open: boolean, restoreFocus?: boolean): Promise<void>;
+  setStayPut(stay: boolean): Promise<Snapshot>;
+  setFollowing(follow: boolean): Promise<Snapshot>;
   goHome(): Promise<void>;
   restore(): Promise<void>;
   openSettings(): Promise<void>;

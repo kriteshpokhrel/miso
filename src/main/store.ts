@@ -34,7 +34,7 @@ export class StateStore {
     } catch (error) {
       const backup = `state.corrupt-${Date.now()}.json`;
       await rename(this.file, path.join(this.directory, backup));
-      console.error('Nooki preserved unreadable state:', error);
+      console.error('Miso preserved unreadable state:', error);
       return { state: null, error: `Saved settings could not be read. The original was preserved as ${backup}; defaults were restored.` };
     }
   }
@@ -47,7 +47,7 @@ export class StateStore {
       await rename(`${this.file}.tmp`, this.file);
     });
     this.pending = operation.catch((error: unknown) => {
-      console.error('Nooki state write failed:', error);
+      console.error('Miso state write failed:', error);
     });
     return operation;
   }

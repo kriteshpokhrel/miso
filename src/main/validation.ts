@@ -20,7 +20,7 @@ export function validateIpcSender(
   shuttingDown: boolean,
 ): void {
   const sender = event.sender;
-  if (shuttingDown || sender.isDestroyed()) throw new Error('The requesting window is closed or Nooki is shutting down.');
+  if (shuttingDown || sender.isDestroyed()) throw new Error('The requesting window is closed or Miso is shutting down.');
   if (!owners.some(owner => owner && !owner.isDestroyed() && owner.webContents === sender)
     || !event.senderFrame || event.senderFrame !== sender.mainFrame) throw new Error('Untrusted request.');
 }
@@ -44,7 +44,7 @@ export function validateSettings(value: unknown): Settings {
   const accentColor = candidate.accentColor === undefined ? DEFAULT_SETTINGS.accentColor : candidate.accentColor;
   if ((coatPattern !== 'single' && coatPattern !== 'dual') || typeof coatColor !== 'string'
     || typeof accentColor !== 'string' || !/^#[a-fA-F0-9]{6}$/.test(coatColor) || !/^#[a-fA-F0-9]{6}$/.test(accentColor)) {
-    throw new Error('Choose single or dual tone and six-digit hex colors for Nooki’s coat.');
+    throw new Error('Choose single or dual tone and six-digit hex colors for Miso’s coat.');
   }
   if (!isSpeciesId(petSpecies) || typeof candidate.launchAtLogin !== 'boolean' || typeof candidate.aiEnabled !== 'boolean'
     || (motionLevel !== 'still' && motionLevel !== 'gentle' && motionLevel !== 'lively')

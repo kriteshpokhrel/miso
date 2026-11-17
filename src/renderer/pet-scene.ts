@@ -47,11 +47,12 @@ export function createPetScene(canvas: HTMLCanvasElement, onError: (message: str
     } catch (reason) {
       lost = true;
       canvas.dataset.ready = 'false';
-      console.error('Nooki 3D frame failed:', reason);
-      onError('Nooki could not draw its 3D scene. Restart Nooki and check your graphics driver.');
+      console.error('Miso 3D frame failed:', reason);
+      onError('Miso could not draw its 3D scene. Restart Miso and check your graphics driver.');
       return;
     }
     canvas.dataset.ready = 'true';
+    canvas.dataset.species = species;
     const diagnostics = model.diagnostics();
     canvas.dataset.lookX = diagnostics.lookX.toFixed(3);
     canvas.dataset.lookY = diagnostics.lookY.toFixed(3);
@@ -96,7 +97,7 @@ export function createPetScene(canvas: HTMLCanvasElement, onError: (message: str
     lost = true;
     if (frame) cancelAnimationFrame(frame);
     canvas.dataset.ready = 'false';
-    onError('Nooki lost its 3D graphics context. Waiting for the graphics driver to restore it.');
+    onError('Miso lost its 3D graphics context. Waiting for the graphics driver to restore it.');
   };
   const contextRestored = (): void => {
     lost = false;

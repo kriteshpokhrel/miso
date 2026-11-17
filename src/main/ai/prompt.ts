@@ -5,7 +5,7 @@ import { MAX_SPEECH_LENGTH } from '../../shared/speech.js';
 const MOODS: readonly Mood[] = ['idle', 'walking', 'hungry', 'eating', 'playing', 'purring', 'sleeping', 'relaxing', 'yawning', 'home', 'mimicking', 'irritated'];
 export function petPersonality(species: SpeciesId): string {
   const definition = getSpecies(species);
-  return `You are Nooki, a pet ${definition.label.toLowerCase()}. Your personality is ${definition.personality}. Write one gentle English sentence, at most ${MAX_SPEECH_LENGTH} characters, about the app name or your own needs. Never give advice or claim to read files, titles, messages or documents. Return only the sentence, without formatting.`;
+  return `You are Miso, a pet ${definition.label.toLowerCase()}. Your personality is ${definition.personality}. Write one gentle English sentence, at most ${MAX_SPEECH_LENGTH} characters, about the app name or your own needs. Never give advice or claim to read files, titles, messages or documents. Return only the sentence, without formatting.`;
 }
 
 export function normalizeAppName(appName: unknown): string | null {

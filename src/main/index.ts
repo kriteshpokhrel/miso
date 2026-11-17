@@ -17,10 +17,14 @@ import { ANGER_DURATION_MS, IRRITATION_DURATION_MS, REASSURANCE_DURATION_MS, hom
 import { WindowGeometryTracker } from './window-geometry.js';
 import { getSpecies } from '../shared/species.js';
 import { MAX_SPEECH_LENGTH, SPEECH_LIFETIME_MS } from '../shared/speech.js';
+import { CARE_WIDTH, CARE_HEIGHT, SPEECH_WIDTH, SPEECH_HEIGHT, careOrbit, petUiBounds } from '../shared/pet-ui.js';
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
 const rendererFile = path.resolve(directory, '../renderer/index.html');
 const WINDOW_SIZE = 300;
+app.setName('Miso');
+app.setPath('userData', path.join(app.getPath('appData'), 'Miso'));
+if (process.platform === 'win32') app.setAppUserModelId('app.miso.desktop');
 const smoke = process.argv.includes('--smoke-test');
 const smokeDirectory = app.isPackaged
   ? path.join(path.dirname(process.execPath), '.smoke-data')
@@ -30,6 +34,11 @@ let pet: PetState;
 let settings: Settings = { ...DEFAULT_SETTINGS, allowedApps: [] };
 let overlay: BrowserWindow | null = null;
 let preferences: BrowserWindow | null = null;
+let careWindow: BrowserWindow | null = null;
+let speechWindow: BrowserWindow | null = null;
+let petUiReady: Promise<void> | null = null;
+let speechBelow = false;
+let speechAnchor = 140;
 let tray: Tray | null = null;
 let ai: LocalAiService;
 let store: StateStore;
@@ -86,7 +95,7 @@ let lastGeometryPoll = 0;
 function still(): boolean { return settings.motionLevel === 'still' || systemReducedMotion; }
 
 function report(error: unknown, context: string): void {
-  console.error(`Nooki ${context}:`, error);
+  console.error(`Miso ${context}:`, error);
   lastError = `${context}: ${error instanceof Error ? error.message : String(error)}`;
   if (modelStateReady) broadcast();
 }
@@ -95,16 +104,91 @@ function snapshot(): Snapshot {
   return {
     pet, settings, model: ai.getStatus(), modelInfo: MODEL_INFO, comment, error: lastError,
     platform: process.platform, packaged: app.isPackaged, moving: overlayMoving, attention,
-    motion, systemReducedMotion, windowFollowing,
+    motion, systemReducedMotion, windowFollowing, careMenuOpen, speechBelow, speechAnchor,
   };
 }
 
 function broadcast(): void {
-  for (const window of [overlay, preferences]) {
+  updatePetUi();
+  for (const window of [overlay, preferences, careWindow, speechWindow]) {
     if (window && !window.isDestroyed() && !window.webContents.isLoading()) {
-      window.webContents.send('nooki:snapshot', snapshot());
+      window.webContents.send('miso:snapshot', snapshot());
     }
   }
+}
+
+function updatePetUi(): void {
+  if (quitting || !overlay || overlay.isDestroyed()) return;
+  const bounds = overlay.getBounds();
+  const layout = petUiBounds(bounds, screen.getDisplayMatching(bounds).workArea, settings.petSize, petTop);
+  speechBelow = layout.speechBelow;
+  speechAnchor = layout.speechAnchor;
+  for (const [window, target, visible] of [
+    [careWindow, layout.care, careMenuOpen && !pet.atHome && overlay.isVisible()],
+    [speechWindow, layout.speech, Boolean(comment) && !pet.atHome && !careMenuOpen && overlay.isVisible()],
+  ] as const) {
+    if (!window || window.isDestroyed()) continue;
+    if (!visible) { if (window.isVisible()) window.hide(); continue; }
+    const current = window.getBounds();
+    if (current.x !== target.x || current.y !== target.y || current.width !== target.width || current.height !== target.height) {
+      window.setBounds(target, false);
+    }
+    if (window === speechWindow && !window.isVisible() && !window.webContents.isLoading()) window.showInactive();
+  }
+}
+
+async function createPetUi(): Promise<void> {
+  const create = (view: 'care' | 'speech'): BrowserWindow => {
+    const window = new BrowserWindow({
+      width: view === 'care' ? CARE_WIDTH : SPEECH_WIDTH, height: view === 'care' ? CARE_HEIGHT : SPEECH_HEIGHT,
+      useContentSize: true, parent: overlay ?? undefined,
+      transparent: true, backgroundColor: '#00000000', frame: false, hasShadow: false,
+      resizable: false, maximizable: false, minimizable: false, fullscreenable: false,
+      alwaysOnTop: true, skipTaskbar: true, show: false, focusable: view === 'care',
+      webPreferences: {
+        preload: path.join(directory, 'preload.cjs'), zoomFactor: 1,
+        contextIsolation: true, sandbox: true, nodeIntegration: false,
+        backgroundThrottling: true, partition: `miso-${view}`,
+      },
+    });
+    secureWindow(window);
+    window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false });
+    if (view === 'speech') window.setIgnoreMouseEvents(true);
+    window.on('close', event => {
+      if (!quitting) {
+        event.preventDefault();
+        if (view === 'care') setCareMenuState(false);
+        else { clearDialogue(); broadcast(); }
+      }
+    });
+    return window;
+  };
+  careWindow = create('care');
+  speechWindow = create('speech');
+  careWindow.on('blur', () => { if (!quitting) setCareMenuState(false); });
+  await Promise.all([
+    careWindow.loadFile(rendererFile, { query: { view: 'care' } }),
+    speechWindow.loadFile(rendererFile, { query: { view: 'speech' } }),
+  ]);
+}
+
+function setCareMenuState(open: boolean, restoreFocus = false): void {
+  if (careMenuOpen === open) return;
+  const now = Date.now();
+  if (open) {
+    careMenuOpenedAt = now;
+    position.vx = 0;
+    overlayMoving = false;
+    clearDialogue();
+  } else {
+    if (hop) hop.start += now - careMenuOpenedAt;
+    walkUntil = 0;
+    moveAt = now + 1500;
+  }
+  careMenuOpen = open;
+  broadcast();
+  if (open) careWindow?.show();
+  else if (restoreFocus && overlay && !overlay.isDestroyed() && overlay.isVisible()) overlay.focus();
 }
 
 async function save(): Promise<void> {
@@ -130,7 +214,7 @@ function createOverlay(): void {
       preload: path.join(directory, 'preload.cjs'),
       contextIsolation: true, sandbox: true, nodeIntegration: false,
       backgroundThrottling: true,
-      partition: 'nooki-pet',
+      partition: 'miso-pet',
     },
   });
   secureWindow(overlay);
@@ -141,10 +225,11 @@ function createOverlay(): void {
     overlay?.webContents.setZoomFactor(settings.petSize);
   });
   overlay.on('blur', finishDrag);
+  overlay.on('hide', updatePetUi);
   overlay.on('close', (event) => {
     if (!quitting) {
       event.preventDefault();
-      void goHome().catch((error: unknown) => report(error, 'Could not send Nooki home'));
+      void goHome().catch((error: unknown) => report(error, 'Could not send Miso home'));
     }
   });
   overlay.once('ready-to-show', () => {
@@ -173,6 +258,7 @@ function setPetBounds(x: number, y: number): void {
   // Carry explicit dimensions: setPosition can grow frameless windows at fractional Windows DPI.
   overlay?.setBounds({ x: Math.round(x), y: Math.round(y), width: Math.round((homeStage ? 500 : WINDOW_SIZE) * settings.petSize),
     height: Math.round((!homeStage && petTop < 63.99 ? 328 : WINDOW_SIZE) * settings.petSize) }, false);
+  updatePetUi();
 }
 
 function openSettings(): void {
@@ -181,12 +267,12 @@ function openSettings(): void {
   if (preferences && !preferences.isDestroyed()) { preferences.show(); preferences.focus(); return; }
   preferences = new BrowserWindow({
     width: 660, height: 800, minWidth: 480, minHeight: 540,
-    title: 'Nooki settings', backgroundColor: '#f5f6f3', autoHideMenuBar: true,
+    title: 'Miso settings', backgroundColor: '#f5f6f3', autoHideMenuBar: true,
     show: false,
     webPreferences: {
       preload: path.join(directory, 'preload.cjs'),
       contextIsolation: true, sandbox: true, nodeIntegration: false,
-      partition: 'nooki-settings',
+      partition: 'miso-settings',
     },
   });
   secureWindow(preferences);
@@ -257,50 +343,69 @@ function createTray(): void {
   const image = nativeImage.createFromBitmap(pixels, { width: size, height: size, scaleFactor: 1 });
   if (process.platform === 'darwin') image.setTemplateImage(true);
   tray = new Tray(image);
-  tray.setToolTip('Nooki - your desktop companion');
+  tray.setToolTip('Miso - your desktop companion');
   tray.setContextMenu(Menu.buildFromTemplate([
-    { label: 'Bring Nooki back', click: restore },
-    { label: 'Send Nooki home', click: () => { void goHome().catch((error: unknown) => report(error, 'Home failed')); } },
+    { label: 'Bring Miso back', click: restore },
+    { label: 'Send Miso home', click: () => { void goHome().catch((error: unknown) => report(error, 'Home failed')); } },
     { type: 'separator' },
     { label: 'Settings', click: openSettings },
-    { label: 'Quit Nooki', click: () => app.quit() },
+    { label: 'Quit Miso', click: () => app.quit() },
   ]));
   tray.on('click', restore);
 }
 
-function checkSender(event: IpcMainInvokeEvent, scope: 'any' | 'settings' | 'pet' = 'any'): void {
-  validateIpcSender(event, scope === 'settings' ? [preferences] : scope === 'pet' ? [overlay] : [overlay, preferences], quitting);
+type SenderScope = 'any' | 'settings' | 'pet' | 'overlay' | 'read';
+function checkSender(event: IpcMainInvokeEvent, scope: SenderScope = 'any'): void {
+  const windows = scope === 'settings' ? [preferences] : scope === 'overlay' ? [overlay]
+    : scope === 'pet' ? [overlay, careWindow] : scope === 'read' ? [overlay, preferences, careWindow, speechWindow]
+      : [overlay, preferences, careWindow];
+  validateIpcSender(event, windows, quitting);
 }
 
 function registerIpc(): void {
-  const handle = (channel: string, handler: (value: unknown) => unknown | Promise<unknown>, scope: 'any' | 'settings' | 'pet' = 'any'): void => {
-    ipcMain.handle(channel, async (event, value: unknown) => {
+  const handle = (channel: string, handler: (value: unknown, extra: unknown) => unknown | Promise<unknown>, scope: SenderScope = 'any'): void => {
+    ipcMain.handle(channel, async (event, value: unknown, extra: unknown) => {
       checkSender(event, scope);
-      try { return await handler(value); }
+      try { return await handler(value, extra); }
       catch (error) { report(error, 'Action failed'); throw error; }
     });
   };
-  handle('nooki:snapshot', () => snapshot());
-  handle('nooki:care', (value) => giveCare(validateCare(value)));
-  handle('nooki:care-menu', value => {
+  handle('miso:snapshot', () => snapshot(), 'read');
+  handle('miso:care', (value) => giveCare(validateCare(value)));
+  handle('miso:care-menu', async (value, focus) => {
     if (typeof value !== 'boolean') throw new Error('Care-menu visibility must be on or off.');
-    if (value && pet.atHome) throw new Error('Bring Nooki back before opening care.');
-    if (careMenuOpen === value) return;
-    const now = Date.now();
-    if (value) {
-      careMenuOpenedAt = now;
-      position.vx = 0;
-      overlayMoving = false;
-    } else {
-      if (hop) hop.start += now - careMenuOpenedAt;
-      walkUntil = 0;
-      moveAt = now + 1500;
-    }
-    careMenuOpen = value;
+    if (focus !== undefined && typeof focus !== 'boolean') throw new Error('Care-menu focus must be on or off.');
+    if (value && pet.atHome) throw new Error('Bring Miso back before opening care.');
+    await petUiReady;
+    if (!careWindow || careWindow.isDestroyed()) throw new Error('The care window is unavailable.');
+    setCareMenuState(value, focus === true);
   }, 'pet');
-  handle('nooki:sleep', async value => {
+  for (const [channel, key] of [['miso:stay', 'stayPut'], ['miso:follow', 'followWindow']] as const) {
+    handle(channel, async value => {
+      if (typeof value !== 'boolean') throw new Error('The quick setting must be on or off.');
+      settings = { ...settings, [key]: value,
+        motionLevel: key === 'stayPut' && !value && settings.motionLevel === 'still' ? 'gentle' : settings.motionLevel };
+      position.vx = 0;
+      walkUntil = 0;
+      destinationX = position.x;
+      moveAt = Date.now() + 1500;
+      geometryFailed = false;
+      if (!settings.followWindow || still()) {
+        geometryTracker?.dispose();
+        geometryTracker = null;
+        geometry = null;
+        displayTransfer = null;
+      }
+      clearDialogue();
+      lastError = null;
+      broadcast();
+      await save();
+      return snapshot();
+    }, 'pet');
+  }
+  handle('miso:sleep', async value => {
     if (typeof value !== 'boolean') throw new Error('Sleep must be on or off.');
-    if (pet.atHome) throw new Error('Bring Nooki back before changing sleep.');
+    if (pet.atHome) throw new Error('Bring Miso back before changing sleep.');
     pet = setSleeping(pet, value, Date.now());
     if (value) {
       hop = null;
@@ -318,10 +423,10 @@ function registerIpc(): void {
     await save();
     return snapshot();
   }, 'pet');
-  handle('nooki:home', goHome);
-  handle('nooki:restore', restore);
-  handle('nooki:settings', openSettings);
-  handle('nooki:update-settings', async (value) => {
+  handle('miso:home', goHome);
+  handle('miso:restore', restore);
+  handle('miso:settings', openSettings);
+  handle('miso:update-settings', async (value) => {
     const next = validateSettings(value);
     if (app.isPackaged && !smoke) {
       app.setLoginItemSettings({ openAtLogin: next.launchAtLogin });
@@ -375,21 +480,21 @@ function registerIpc(): void {
     broadcast();
     return snapshot();
   }, 'settings');
-  handle('nooki:download-model', async (value) => {
+  handle('miso:download-model', async (value) => {
     if (value !== true) throw new Error('Explicit download consent is required.');
     await ai.download(true);
   }, 'settings');
-  handle('nooki:cancel-model', () => ai.cancelDownload(), 'settings');
-  handle('nooki:remove-model', async () => {
+  handle('miso:cancel-model', () => ai.cancelDownload(), 'settings');
+  handle('miso:remove-model', async () => {
     stopForegroundLookup();
     settings = { ...settings, aiEnabled: false };
     await save();
     await ai.remove();
     broadcast();
   }, 'settings');
-  handle('nooki:drag-start', startDrag, 'pet');
-  handle('nooki:drag', dragPet, 'pet');
-  handle('nooki:drag-end', finishDrag, 'pet');
+  handle('miso:drag-start', startDrag, 'overlay');
+  handle('miso:drag', dragPet, 'overlay');
+  handle('miso:drag-end', finishDrag, 'overlay');
 }
 
 function clearDialogue(): void {
@@ -409,7 +514,7 @@ function say(line: string, duration = SPEECH_LIFETIME_MS): void {
 }
 
 async function giveCare(action: CareAction): Promise<Snapshot> {
-  if (pet.atHome) throw new Error('Restore Nooki before giving care.');
+  if (pet.atHome) throw new Error('Restore Miso before giving care.');
   clearDialogue();
   pet = care(pet, action, Date.now());
   irritationStarted = 0;
@@ -586,7 +691,7 @@ function moveOverlay(now: number): void {
           : geometry.bounds.y - size * 236 / 300 < area.y ? 'No room above this window. Move it lower or choose a smaller pet.'
             : 'Desktop: this window is too narrow or outside the work area';
   if (displayTransfer) windowFollowing = 'Walking across to your other display';
-  else if (crossing) windowFollowing = blockedTransfer ? 'No connected floor to the other display. Carry Nooki there.' : 'Landing here before following your other display';
+  else if (crossing) windowFollowing = blockedTransfer ? 'No connected floor to the other display. Carry Miso there.' : 'Landing here before following your other display';
   if (still() || !homeTravel && (careMenuOpen || settings.stayPut)) {
     if (!careMenuOpen) hop = null;
     position.vx = 0;
@@ -659,7 +764,7 @@ function step(): void {
   updateAttention();
   if (now - lastMotionSent >= 66 && overlay?.isVisible() && !overlay.webContents.isLoading()) {
     lastMotionSent = now;
-    overlay.webContents.send('nooki:motion', motion);
+    overlay.webContents.send('miso:motion', motion);
   }
   if (irritationStarted) {
     const beat = irritationBeat(now - irritationStarted);
@@ -705,7 +810,7 @@ function step(): void {
   broadcast();
   if (now - lastSaved > 30_000) {
     lastSaved = now;
-    void save().catch((error: unknown) => report(error, 'Could not save Nooki'));
+    void save().catch((error: unknown) => report(error, 'Could not save Miso'));
   }
 }
 
@@ -719,7 +824,7 @@ function updateAttention(): void {
     && Math.abs(next.y - attention.y) < 0.005) return;
   attention = next;
   lastAttentionSent = Date.now();
-  if (overlay && !overlay.webContents.isLoading()) overlay.webContents.send('nooki:attention', attention);
+  if (overlay && !overlay.webContents.isLoading()) overlay.webContents.send('miso:attention', attention);
 }
 async function start(): Promise<void> {
   store = new StateStore(app.getPath('userData'));
@@ -743,6 +848,8 @@ async function start(): Promise<void> {
   createTray();
   createOverlay();
   registerIpc();
+  petUiReady = createPetUi();
+  await petUiReady;
   if (!loaded.state && !smoke) openSettings();
   timer = setInterval(step, 1000 / 30);
   await save();
@@ -756,19 +863,75 @@ async function start(): Promise<void> {
       });
     }
     const result: unknown = await window.webContents.executeJavaScript(`({
-      bridge: typeof window.nooki?.getSnapshot === 'function',
+      bridge: typeof window.miso?.getSnapshot === 'function',
       nodeBlocked: typeof window.require === 'undefined',
       title: document.title,
       hasToolbar: Boolean(document.querySelector('#pet-view .pet-controls'))
     })`);
-    console.log('NOOKI_SMOKE', JSON.stringify(result));
+    console.log('MISO_SMOKE', JSON.stringify(result));
     if (typeof result !== 'object' || result === null
       || !(result as Record<string, unknown>).bridge || !(result as Record<string, unknown>).nodeBlocked) {
       throw new Error('Desktop isolation smoke failed.');
     }
+    if (app.getName() !== 'Miso' || (result as Record<string, unknown>).title !== 'Miso') {
+      throw new Error('The native application and renderer must both identify as Miso.');
+    }
     if ((result as Record<string, unknown>).hasToolbar) throw new Error('Desktop still contains a persistent care toolbar.');
     const imageDirectory = smokeDirectory;
     await mkdir(imageDirectory, { recursive: true });
+    const carePopup = careWindow;
+    const speechPopup = speechWindow;
+    if (!carePopup || !speechPopup) throw new Error('Unscaled pet UI was not created.');
+    const checkCarePopup = async (name: string): Promise<void> => {
+      const before = window.getBounds();
+      await window.webContents.executeJavaScript(`document.getElementById('cat').dispatchEvent(new MouseEvent('contextmenu', {bubbles:true,cancelable:true}))`);
+      await new Promise(resolve => setTimeout(resolve, 250));
+      const expected = Array.from({ length: 8 }, (_, index) => careOrbit(index, 8, carePopup.getContentBounds().width));
+      const error: string | null = await carePopup.webContents.executeJavaScript(`(() => {
+        const nav = document.getElementById('pet-menu');
+        const buttons = [...nav.querySelectorAll('button')];
+        if (nav.hidden || buttons.length !== 8) return 'Missing care actions';
+        const expected = ${JSON.stringify(expected)};
+        const labels = [];
+        for (const [index, button] of buttons.entries()) {
+          const box = button.getBoundingClientRect();
+          const label = button.querySelector('span:last-child') || button;
+          const text = label.getBoundingClientRect();
+          if (!button.checkVisibility() || box.width < 44 || box.height < 44
+            || Math.abs(box.x + box.width/2 - expected[index].x) > 1
+            || Math.abs(box.y + box.height/2 - expected[index].y) > 1) return 'Invalid care target: ' + button.id;
+          if (parseFloat(getComputedStyle(label).fontSize) < 12 || !text.width || !text.height
+            || text.left < 0 || text.right > innerWidth || text.top < 0 || text.bottom > innerHeight) return 'Unreadable care label: ' + button.id;
+          labels.push(text);
+        }
+        for (let i=0; i<labels.length; i++) for (let j=i+1; j<labels.length; j++) {
+          const a=labels[i], b=labels[j];
+          if (a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top) return 'Overlapping care labels';
+        }
+        if (document.getElementById('pet-canvas').dataset.ready === 'true') return 'Care created a second 3D scene';
+        return null;
+      })()`);
+      if (error || !carePopup.isVisible() || carePopup.webContents.getZoomFactor() !== 1) {
+        throw new Error(`Unscaled ${name} care failed: ${error ?? 'native visibility or zoom'}`);
+      }
+      if (JSON.stringify(window.getBounds()) !== JSON.stringify(before)) throw new Error('Opening care moved or resized the pet.');
+      const pixels = (await window.capturePage()).toBitmap();
+      await new Promise(resolve => setTimeout(resolve, 350));
+      if (JSON.stringify(window.getBounds()) !== JSON.stringify(before)
+        || !pixels.equals((await window.capturePage()).toBitmap())) throw new Error('Miso moved or animated with care open.');
+      await writeFile(path.join(imageDirectory, name), (await carePopup.capturePage()).toPNG());
+      await carePopup.webContents.executeJavaScript(`document.getElementById('pet-menu').dispatchEvent(new KeyboardEvent('keydown', {key:'Escape',bubbles:true}))`);
+      await new Promise(resolve => setTimeout(resolve, 100));
+      if (careMenuOpen || carePopup.isVisible()) throw new Error('Escape did not dismiss native care.');
+    };
+    async function waitForSavedToggle(key: 'stayPut' | 'followWindow', expected: boolean): Promise<void> {
+      const deadline = Date.now() + 3000;
+      while (Date.now() < deadline) {
+        if (settings[key] === expected && (await store.load()).state?.settings[key] === expected) return;
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      throw new Error(`Quick ${key} did not persist ${expected}.`);
+    }
     const graphicsDeadline = Date.now() + 15_000;
     let graphicsReady = false;
     while (!graphicsReady && Date.now() < graphicsDeadline) {
@@ -797,7 +960,7 @@ async function start(): Promise<void> {
       attention = { ...NEUTRAL_ATTENTION };
       broadcast();
       for (const [name, x] of [['look-left', -1], ['look-right', 1], ['look-neutral', 0]] as const) {
-        window.webContents.send('nooki:attention', { x, y: 0, nearby: x !== 0 });
+        window.webContents.send('miso:attention', { x, y: 0, nearby: x !== 0 });
         await new Promise(resolve => setTimeout(resolve, 650));
         const yaw: number = await window.webContents.executeJavaScript(`Number(document.getElementById('pet-canvas').dataset.lookX)`);
         if (x === 0 ? Math.abs(yaw) > 0.02 : yaw * x < 0.45) throw new Error(`3D ${name} head tracking failed: ${yaw}`);
@@ -868,16 +1031,16 @@ async function start(): Promise<void> {
     walkUntil = 0;
     destinationX = position.x;
     const before = pet.hunger;
-    await window.webContents.executeJavaScript(`window.nooki.care('feed')`);
+    await window.webContents.executeJavaScript(`window.miso.care('feed')`);
     if (pet.hunger > before) throw new Error('Feed smoke failed.');
     await new Promise(resolve => setTimeout(resolve, 250));
     const eating: boolean = await window.webContents.executeJavaScript(`document.getElementById('pet-canvas').dataset.eating === 'true'`);
     if (!eating) throw new Error('Feeding did not render the real bowl and eating pose.');
     await writeFile(path.join(imageDirectory, 'eating.png'), (await window.capturePage()).toPNG());
-    await window.webContents.executeJavaScript(`window.nooki.care('play')`);
+    await window.webContents.executeJavaScript(`window.miso.care('play')`);
     await new Promise(resolve => setTimeout(resolve, 250));
     await writeFile(path.join(imageDirectory, 'playing.png'), (await window.capturePage()).toPNG());
-    await window.webContents.executeJavaScript(`window.nooki.care('pet')`);
+    await window.webContents.executeJavaScript(`window.miso.care('pet')`);
     await new Promise((resolve) => setTimeout(resolve, 200));
     await writeFile(path.join(imageDirectory, 'pet.png'), (await window.capturePage()).toPNG());
     pet = { ...pet, mood: 'mimicking', reactionUntil: Date.now() + 14_000 };
@@ -905,43 +1068,32 @@ async function start(): Promise<void> {
       throw new Error(`The angry warning did not soften into reassurance (mood=${pet.mood}, softened=${irritationSoftened}, elapsed=${Date.now() - irritationStarted}).`);
     }
     await writeFile(path.join(imageDirectory, 'reassurance.png'), (await window.capturePage()).toPNG());
-    await window.webContents.executeJavaScript(`document.getElementById('cat').dispatchEvent(new MouseEvent('contextmenu', {bubbles:true,cancelable:true}))`);
-    await new Promise(resolve => setTimeout(resolve, 250));
-    const radialReady: boolean = await window.webContents.executeJavaScript(`(() => {
-      const buttons = [...document.querySelectorAll('#pet-menu button')];
-      return !document.getElementById('pet-menu').hidden && buttons.length === 5 && buttons.every(button => {
-        const box = button.getBoundingClientRect();
-        return box.y + box.height/2 <= 160.1 && Math.abs(Math.hypot(box.x + box.width/2 - 150, box.y + box.height/2 - 160) - 128) < 1;
-      });
-    })()`);
-    if (!radialReady) throw new Error('Right-click did not open the upper semicircle of care icons.');
-    const menuBounds = window.getBounds();
-    const menuPixels = (await window.capturePage()).toBitmap();
-    await new Promise(resolve => setTimeout(resolve, 350));
-    if (window.getBounds().x !== menuBounds.x || window.getBounds().y !== menuBounds.y
-      || !menuPixels.equals((await window.capturePage()).toBitmap())) throw new Error('Nooki moved while the care options were visible.');
-    await writeFile(path.join(imageDirectory, 'radial-care.png'), (await window.capturePage()).toPNG());
-    await window.webContents.executeJavaScript(`document.getElementById('pet-menu').dispatchEvent(new KeyboardEvent('keydown', {key:'Escape',bubbles:true}))`);
-    openSettings();
-    const pinSettings = preferences;
-    if (!pinSettings) throw new Error('Could not open settings for Stay, please.');
-    if (pinSettings.webContents.isLoadingMainFrame()) {
-      await new Promise<void>(resolve => pinSettings.webContents.once('did-finish-load', () => resolve()));
-    }
-    await pinSettings.webContents.executeJavaScript(`window.nooki.getSnapshot().then(({settings}) => window.nooki.updateSettings({...settings, stayPut:true}))`);
+    await checkCarePopup('radial-care.png');
+    await window.webContents.executeJavaScript(`window.miso.setCareMenuOpen(true)`);
+    await new Promise(resolve => setTimeout(resolve, 100));
+    await carePopup.webContents.executeJavaScript(`document.getElementById('care-stay').click()`);
+    await waitForSavedToggle('stayPut', true);
     const pinnedBounds = window.getBounds();
     destinationX = position.x + 150;
     walkUntil = Date.now() + 2000;
     await new Promise(resolve => setTimeout(resolve, 250));
     if (window.getBounds().x !== pinnedBounds.x || window.getBounds().y !== pinnedBounds.y || settings.motionLevel !== 'gentle') throw new Error('Stay put failed to preserve position without disabling animations.');
-    await pinSettings.webContents.executeJavaScript(`window.nooki.getSnapshot().then(({settings}) => window.nooki.updateSettings({...settings, stayPut:false}))`);
-    await new Promise<void>(resolve => { pinSettings.once('closed', () => resolve()); pinSettings.close(); });
-    await window.webContents.executeJavaScript(`window.nooki.setSleeping(true)`);
+    await window.webContents.executeJavaScript(`window.miso.setCareMenuOpen(true)`);
+    await new Promise(resolve => setTimeout(resolve, 100));
+    await carePopup.webContents.executeJavaScript(`document.getElementById('care-stay').click()`);
+    await waitForSavedToggle('stayPut', false);
+    const previousFollow = settings.followWindow;
+    await window.webContents.executeJavaScript(`window.miso.setCareMenuOpen(true)`);
+    await new Promise(resolve => setTimeout(resolve, 100));
+    await carePopup.webContents.executeJavaScript(`document.getElementById('care-follow').click()`);
+    await waitForSavedToggle('followWindow', !previousFollow);
+    await carePopup.webContents.executeJavaScript(`window.miso.setFollowing(${previousFollow})`);
+    await window.webContents.executeJavaScript(`window.miso.setSleeping(true)`);
     const sleepingBounds = window.getBounds();
     const beforeSleepGeometry = geometry;
     geometry = { bounds: { x: smokeArea.x + 40, y: smokeArea.y + 370, width: 700, height: 200 }, maximized: false };
     await new Promise(resolve => setTimeout(resolve, 500));
-    if (window.getBounds().x !== sleepingBounds.x || window.getBounds().y !== sleepingBounds.y) throw new Error('Sleeping Nooki followed a newly active window.');
+    if (window.getBounds().x !== sleepingBounds.x || window.getBounds().y !== sleepingBounds.y) throw new Error('Sleeping Miso followed a newly active window.');
     geometry = beforeSleepGeometry;
     if (snapshot().pet.mood !== 'sleeping' || comment !== null) throw new Error('Explicit sleep did not cancel old dialogue.');
     await writeFile(path.join(imageDirectory, 'sleeping.png'), (await window.capturePage()).toPNG());
@@ -949,11 +1101,11 @@ async function start(): Promise<void> {
     window.webContents.sendInputEvent({ type: 'mouseDown', x: 150, y: 200, button: 'left', clickCount: 1 });
     window.webContents.sendInputEvent({ type: 'mouseUp', x: 150, y: 200, button: 'left', clickCount: 1 });
     await new Promise(resolve => setTimeout(resolve, 100));
-    if (snapshot().pet.mood === 'sleeping') throw new Error('Tapping did not wake Nooki.');
+    if (snapshot().pet.mood === 'sleeping') throw new Error('Tapping did not wake Miso.');
     if (process.platform === 'win32') {
       if (!await foregroundAppName() || !await foregroundAppName()) throw new Error('Cold or warm foreground lookup returned no app name.');
       stopForegroundLookup();
-      console.log('NOOKI_FOREGROUND cold and warm name-only lookup passed.');
+      console.log('MISO_FOREGROUND cold and warm name-only lookup passed.');
     }
     for (const mood of ['relaxing', 'yawning'] as const) {
       pet = { ...pet, mood, reactionUntil: Date.now() + 5000 };
@@ -977,10 +1129,10 @@ async function start(): Promise<void> {
     step();
     if (pet.lastBreakReminderAt < 45 * 60 * 1000 || !comment) throw new Error('Affectionate break reminder did not trigger.');
     const disturbanceBeforeTap = pet.disturbance;
-    await window.webContents.executeJavaScript(`window.nooki.startDrag().then(() => window.nooki.endDrag())`);
-    if (pet.disturbance > disturbanceBeforeTap) throw new Error('A stationary tap incorrectly disturbed Nooki.');
+    await window.webContents.executeJavaScript(`window.miso.startDrag().then(() => window.miso.endDrag())`);
+    if (pet.disturbance > disturbanceBeforeTap) throw new Error('A stationary tap incorrectly disturbed Miso.');
     attention = { x: 1, y: 0, nearby: true };
-    await window.webContents.executeJavaScript(`window.nooki.goHome()`);
+    await window.webContents.executeJavaScript(`window.miso.goHome()`);
     if (!pet.atHome) throw new Error('Home smoke failed.');
     if (attention.nearby || attention.x !== 0 || attention.y !== 0) throw new Error('Home did not neutralize cursor attention.');
     const homeTravelStarted = Date.now();
@@ -1012,11 +1164,11 @@ async function start(): Promise<void> {
     }
     if (window.isVisible()) throw new Error('Home edge animation did not hide the overlay.');
     if (!houseSeen || !entrySeen || !departureSeen) throw new Error('Home hid before the visible house, entry and departure sequence.');
-    console.log('NOOKI_HOME', JSON.stringify({ travelMs: houseStarted - homeTravelStarted, sequenceMs: Date.now() - houseStarted }));
+    console.log('MISO_HOME', JSON.stringify({ travelMs: houseStarted - homeTravelStarted, sequenceMs: Date.now() - houseStarted }));
     const homeHunger = pet.hunger;
     await new Promise((resolve) => setTimeout(resolve, 1100));
     if (pet.hunger !== homeHunger) throw new Error('Needs did not pause at home.');
-    await window.webContents.executeJavaScript(`window.nooki.restore()`);
+    await window.webContents.executeJavaScript(`window.miso.restore()`);
     if (pet.atHome) throw new Error('Restore smoke failed.');
     openSettings();
     const settingsWindow = preferences;
@@ -1025,7 +1177,7 @@ async function start(): Promise<void> {
       await new Promise<void>((resolve) => settingsWindow.webContents.once('did-finish-load', () => resolve()));
     }
     attention = { x: 1, y: 0, nearby: true };
-    await settingsWindow.webContents.executeJavaScript(`window.nooki.updateSettings({
+    await settingsWindow.webContents.executeJavaScript(`window.miso.updateSettings({
       launchAtLogin: false, aiEnabled: false, reducedMotion: true,
       commentFrequency: 'balanced', allowedApps: ['Code.exe'], petSize: 1.3, breakReminders: true
     })`);
@@ -1039,18 +1191,67 @@ async function start(): Promise<void> {
     if (Math.abs(window.getContentBounds().width - 390) > 1 || Math.abs(window.webContents.getZoomFactor() - 1.3) > 0.01) {
       throw new Error(`Configurable native pet size smoke failed: content=${JSON.stringify(window.getContentBounds())}; outer=${JSON.stringify(window.getBounds())}; zoom=${window.webContents.getZoomFactor()}`);
     }
-    await settingsWindow.webContents.executeJavaScript(`window.nooki.getSnapshot().then(({settings}) => window.nooki.updateSettings({...settings, petSize:0.5}))`);
+    await settingsWindow.webContents.executeJavaScript(`window.miso.getSnapshot().then(({settings}) => window.miso.updateSettings({...settings, petSize:0.5}))`);
     if (Math.abs(window.getContentBounds().width - 150) > 1 || Math.abs(window.webContents.getZoomFactor() - 0.5) > 0.01) throw new Error('The 50% minimum did not render at the requested native size.');
     await new Promise(resolve => setTimeout(resolve, 150));
     await writeFile(path.join(imageDirectory, 'tiny.png'), (await window.capturePage()).toPNG());
-    await settingsWindow.webContents.executeJavaScript(`window.nooki.getSnapshot().then(({settings}) => window.nooki.updateSettings({...settings, petSize:1.3}))`);
-    const denied: boolean = await window.webContents.executeJavaScript(`window.nooki.updateSettings({
+    await checkCarePopup('tiny-care.png');
+    const tinyBounds = window.getBounds();
+    comment = 'W'.repeat(MAX_SPEECH_LENGTH);
+    commentUntil = Date.now() + SPEECH_LIFETIME_MS;
+    broadcast();
+    await new Promise(resolve => setTimeout(resolve, 150));
+    const speechError: string | null = await speechPopup.webContents.executeJavaScript(`(() => {
+      const speech = document.getElementById('speech'), box = speech.getBoundingClientRect();
+      const range = document.createRange(); range.selectNodeContents(speech);
+      if (speech.hidden || speech.textContent.length !== ${MAX_SPEECH_LENGTH} || box.width <= 0 || box.height <= 0) return 'Missing speech';
+      if (parseFloat(getComputedStyle(speech).fontSize) < 12) return 'Scaled speech text';
+      if ([...range.getClientRects()].some(r => r.left < 0 || r.right > innerWidth || r.top < 0 || r.bottom > innerHeight)) return 'Clipped speech text: ' + JSON.stringify({
+          viewport:[innerWidth,innerHeight], box:box.toJSON(), rects:[...range.getClientRects()].map(r=>r.toJSON()),
+          style:getComputedStyle(speech).font
+        });
+      if (document.getElementById('pet-canvas').dataset.ready === 'true') return 'Speech created a second 3D scene';
+      return null;
+    })()`);
+    await writeFile(path.join(imageDirectory, 'speech-stress.png'), (await speechPopup.capturePage()).toPNG());
+    if (speechError || !speechPopup.isVisible() || speechPopup.webContents.getZoomFactor() !== 1
+      || JSON.stringify(window.getBounds()) !== JSON.stringify(tinyBounds)) {
+      throw new Error(`Tiny speech failed: ${speechError ?? 'native visibility, zoom or changed pet bounds'}`);
+    }
+    say('A tiny break? Stretch a little. I will guard the keyboard.');
+    broadcast();
+    await new Promise(resolve => setTimeout(resolve, 100));
+    await writeFile(path.join(imageDirectory, 'tiny-speech.png'), (await speechPopup.capturePage()).toPNG());
+    const priorTop = petTop;
+    const priorPosition = { ...position };
+    petTop = 0;
+    setPetBounds(tinyBounds.x, screen.getDisplayMatching(tinyBounds).workArea.y + 120);
+    broadcast();
+    await new Promise(resolve => setTimeout(resolve, 100));
+    if (!speechBelow || speechPopup.getBounds().y <= window.getBounds().y) throw new Error('Compact speech did not appear below the perched pet.');
+    await writeFile(path.join(imageDirectory, 'perched-speech.png'), (await speechPopup.capturePage()).toPNG());
+    petTop = priorTop;
+    position = priorPosition;
+    setPetBounds(tinyBounds.x, tinyBounds.y);
+    clearDialogue();
+    broadcast();
+    if (speechPopup.isVisible()) throw new Error('Cancelled speech left an invisible or stale speech window open.');
+    await carePopup.webContents.executeJavaScript(`window.miso.setStayPut(false)`);
+    if (snapshot().settings.motionLevel !== 'gentle') throw new Error('Roam did not resume Gentle from Still.');
+    await settingsWindow.webContents.executeJavaScript(`window.miso.getSnapshot().then(({settings}) => window.miso.updateSettings({...settings,motionLevel:'still'}))`);
+    await settingsWindow.webContents.executeJavaScript(`window.miso.getSnapshot().then(({settings}) => window.miso.updateSettings({...settings, petSize:1.3}))`);
+    const denied: boolean = await window.webContents.executeJavaScript(`window.miso.updateSettings({
       launchAtLogin: false, aiEnabled: false, reducedMotion: true,
       commentFrequency: 'quiet', allowedApps: []
     }).then(() => false, () => true)`);
     if (!denied) throw new Error('Overlay was allowed to modify privileged settings.');
+    const careDenied: boolean = await carePopup.webContents.executeJavaScript(`window.miso.getSnapshot().then(({settings}) =>
+      Promise.all([window.miso.updateSettings(settings), window.miso.startDrag(), window.miso.downloadModel(true)]
+        .map(p => p.then(() => false, () => true)))).then(results => results.every(Boolean))`);
+    const speechDenied: boolean = await speechPopup.webContents.executeJavaScript(`window.miso.care('feed').then(() => false, () => true)`);
+    if (!careDenied || !speechDenied) throw new Error('Auxiliary UI obtained settings, model, drag or mutation privileges outside its scope.');
     const consentDenied: boolean = await settingsWindow.webContents.executeJavaScript(
-      `window.nooki.downloadModel(false).then(() => false, () => true)`);
+      `window.miso.downloadModel(false).then(() => false, () => true)`);
     if (!consentDenied) throw new Error('Model download did not require explicit consent.');
     lastError = null;
     broadcast();
@@ -1102,15 +1303,46 @@ async function start(): Promise<void> {
     await waitForColors(settingsWindow, 'coat-preview', '79584f', 'f4dfc3');
     if (settings.coatColor !== coatBeforePreview) throw new Error('A preview changed the saved desktop coat.');
     await writeFile(path.join(imageDirectory, 'coat-closet.png'), (await settingsWindow.capturePage()).toPNG());
-    settingsWindow.setSize(500, 800);
+    settingsWindow.setSize(500, 540);
     await new Promise(resolve => setTimeout(resolve, 300));
     const saveVisible: boolean = await settingsWindow.webContents.executeJavaScript(`(() => {
       const bounds = document.getElementById('save-button').getBoundingClientRect();
       return bounds.top >= 0 && bounds.bottom <= innerHeight;
     })()`);
     if (!saveVisible) throw new Error('Coat customization hid Save below the compact viewport.');
+    const layoutError: string | null = await settingsWindow.webContents.executeJavaScript(`(() => {
+      if (document.documentElement.scrollWidth > innerWidth) return 'Horizontal overflow';
+      const choices = [...document.querySelectorAll('#pet-species [role=radio]')];
+      if (choices.length !== 4 || choices.some(choice => choice.getBoundingClientRect().height < 40)) return 'Missing companion choices';
+      for (const row of document.querySelectorAll('.setting-row,.coat-color-row')) {
+        if (!row.checkVisibility()) continue;
+        const label = row.querySelector('div'), control = row.querySelector('select,input');
+        if (label && control) {
+          const a = label.getBoundingClientRect(), b = control.getBoundingClientRect();
+          if (a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top) return 'Overlapping label and field';
+        }
+      }
+      for (const block of document.querySelectorAll('.selected-pet,.coat-color-row,fieldset,.setting-row,.save-bar,.model-section')) {
+        if (!block.checkVisibility()) continue;
+        const box = block.getBoundingClientRect(), style = getComputedStyle(block);
+        const lines = [];
+        if (parseFloat(style.borderTopWidth)) lines.push(box.top);
+        if (parseFloat(style.borderBottomWidth)) lines.push(box.bottom);
+        for (const field of block.querySelectorAll('input,select,textarea,button')) {
+          if (!field.checkVisibility()) continue;
+          const r = field.getBoundingClientRect();
+          if (lines.some(y => y > r.top + 1 && y < r.bottom - 1)) return 'Divider crosses a field';
+        }
+      }
+      return null;
+    })()`);
     await writeFile(path.join(imageDirectory, 'coat-closet-compact.png'), (await settingsWindow.capturePage()).toPNG());
+    if (layoutError) throw new Error(`Compact settings layout failed: ${layoutError}`);
+    await settingsWindow.webContents.executeJavaScript(`window.scrollTo(0,0)`);
+    await writeFile(path.join(imageDirectory, 'pets-compact.png'), (await settingsWindow.capturePage()).toPNG());
     settingsWindow.setSize(660, 800);
+    await new Promise(resolve => setTimeout(resolve, 150));
+    await writeFile(path.join(imageDirectory, 'pets-regular.png'), (await settingsWindow.capturePage()).toPNG());
     await settingsWindow.webContents.executeJavaScript(`(() => {
       const pattern = document.getElementById('coat-pattern');
       pattern.value = 'single';
@@ -1130,7 +1362,7 @@ async function start(): Promise<void> {
     if (reopened.webContents.isLoadingMainFrame()) {
       await new Promise<void>(resolve => reopened.webContents.once('did-finish-load', () => resolve()));
     }
-    const loadedColors: boolean = await reopened.webContents.executeJavaScript(`window.nooki.getSnapshot().then(snapshot =>
+    const loadedColors: boolean = await reopened.webContents.executeJavaScript(`window.miso.getSnapshot().then(snapshot =>
       snapshot.settings.coatPattern === 'single' && snapshot.settings.coatColor === '#79584f'
         && snapshot.settings.accentColor === '#f4dfc3')`);
     if (!loadedColors) throw new Error('Reopened preferences lost the saved single coat or remembered contrast.');
@@ -1147,12 +1379,80 @@ async function start(): Promise<void> {
     await reopened.webContents.executeJavaScript(`document.getElementById('settings-form').requestSubmit()`);
     await waitForColors(window, 'pet-canvas', '315b65', 'f4dfc3');
     await writeFile(path.join(imageDirectory, 'coat-dual.png'), (await window.capturePage()).toPNG());
+    const speciesSettings = { ...settings, allowedApps: [...settings.allowedApps] };
+    if (timer) clearInterval(timer);
+    try {
+      await reopened.webContents.executeJavaScript(`window.miso.getSnapshot().then(({settings}) =>
+        window.miso.updateSettings({...settings, petSize:1, motionLevel:'gentle', followWindow:false, stayPut:true}))`);
+      async function waitForSpecies(target: BrowserWindow, canvas: string, species: string): Promise<void> {
+        const deadline = Date.now() + 5000;
+        while (Date.now() < deadline) {
+          const rendered: boolean = await target.webContents.executeJavaScript(`(() => {
+            const canvas = document.getElementById(${JSON.stringify(canvas)});
+            return canvas.dataset.ready === 'true' && canvas.dataset.species === ${JSON.stringify(species)};
+          })()`);
+          if (rendered) return;
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+        throw new Error(`The ${species} companion did not render on ${canvas}.`);
+      }
+      for (const species of ['dog', 'panda', 'octopus'] as const) {
+        const before = pet.species;
+        await reopened.webContents.executeJavaScript(`document.getElementById(${JSON.stringify(`choose-${species}`)}).click()`);
+        await waitForSpecies(reopened, 'coat-preview', species);
+        if (pet.species !== before) throw new Error('Previewing a companion changed the desktop before Save.');
+        await reopened.webContents.executeJavaScript(`document.getElementById('settings-form').requestSubmit()`);
+        await waitForSpecies(window, 'pet-canvas', species);
+        const persisted = await store.load();
+        if (persisted.state?.pet.species !== species || persisted.state.settings.petSpecies !== species) {
+          throw new Error(`The ${species} companion was not saved through the settings form.`);
+        }
+        for (const action of ['feed', 'pet', 'play'] as const) {
+          await window.webContents.executeJavaScript(`window.miso.care(${JSON.stringify(action)})`);
+          if (pet.mood !== getSpecies(species).care[action].mood) throw new Error(`The ${species} ${action} reaction failed.`);
+        }
+        for (const phase of ['idle', 'walking', 'sleeping', 'mimicking', 'eating', 'irritated', 'falling', 'home'] as const) {
+          homeStage = phase === 'home';
+          setPetBounds(position.x, position.y);
+          pet = { ...pet, mood: phase === 'walking' || phase === 'falling' ? 'idle' : phase, reactionUntil: 0 };
+          motion = phase === 'walking' ? { state: 'walking', direction: 1, speed: 65, progress: 0 }
+            : phase === 'falling' ? { state: 'falling', direction: 1, speed: 0, progress: 0.5 }
+            : phase === 'home' ? { state: 'home-entering', direction: 1, speed: 0, progress: 0.65 } : { ...IDLE_MOTION };
+          clearDialogue();
+          broadcast();
+          await new Promise(resolve => setTimeout(resolve, phase === 'sleeping' ? 1000 : 400));
+          const rendered: { error: string; eating: string; house: string } = await window.webContents.executeJavaScript(`({
+            error: document.getElementById('pet-canvas').dataset.renderError || '',
+            eating: document.getElementById('pet-canvas').dataset.eating,
+            house: document.getElementById('pet-canvas').dataset.house
+          })`);
+          if (rendered.error || (phase === 'eating' && rendered.eating !== 'true') || (phase === 'home' && rendered.house !== 'true')) {
+            throw new Error(`The ${species} ${phase} visual state failed.`);
+          }
+          await writeFile(path.join(imageDirectory, `pet-${species}-${phase}.png`), (await window.capturePage()).toPNG());
+        }
+        homeStage = false;
+        motion = { ...IDLE_MOTION };
+        pet = { ...pet, mood: 'idle' };
+        setPetBounds(position.x, position.y);
+        broadcast();
+      }
+      const choice: string = await reopened.webContents.executeJavaScript(`document.querySelector('#pet-species [aria-checked="true"]').dataset.species`);
+      if (choice !== 'octopus') throw new Error('The saved companion selection did not remain selected.');
+      console.log('MISO_SPECIES dog, panda and octopus: draft preview, explicit save, native care, eight visual states and persistence passed.');
+    } finally {
+      homeStage = false;
+      motion = { ...IDLE_MOTION };
+      await reopened.webContents.executeJavaScript(`window.miso.updateSettings(${JSON.stringify(speciesSettings)})`);
+      setPetBounds(position.x, position.y);
+      timer = setInterval(step, 1000 / 30);
+    }
     if (process.argv.includes('--smoke-inference')) {
       const line = await ai.generate('code.exe', pet);
       if (ai.getStatus().phase !== 'ready') throw new Error(`Local inference smoke failed: ${ai.getStatus().error ?? 'Backend unavailable'}`);
       const fallback = scriptedComment({ ...pet, lastCommentAt: 0 }, settings.commentFrequency, Date.now());
       if (!line && !fallback) throw new Error('Rejected model output had no scripted fallback.');
-      console.log('NOOKI_INFERENCE', line ?? `Generated output rejected; scripted fallback: ${fallback}`);
+      console.log('MISO_INFERENCE', line ?? `Generated output rejected; scripted fallback: ${fallback}`);
     }
     await save();
     const reloaded = await store.load();
@@ -1161,7 +1461,7 @@ async function start(): Promise<void> {
     }
     if (reloaded.state.settings.coatPattern !== 'dual' || reloaded.state.settings.coatColor !== '#315b65'
       || reloaded.state.settings.accentColor !== '#f4dfc3') throw new Error('Custom coat colors did not persist.');
-    console.log('NOOKI_SMOKE passed: real transparent WebGL, directional gaze/neutral reset, reduced motion, isolated renderer/IPC, care, mimic, irritation, break reminders, home/needs pause, restore, size, consent, privilege guards, persistent single/dual coat, draft-only 3D preview, presets/custom colors, persistence.');
+    console.log('MISO_SMOKE passed: real transparent WebGL, directional gaze/neutral reset, reduced motion, isolated renderer/IPC, care, mimic, irritation, break reminders, home/needs pause, restore, size, consent, privilege guards, persistent single/dual coat, draft-only 3D preview, presets/custom colors, persistence.');
     app.quit();
   }
 }
@@ -1182,11 +1482,11 @@ else {
     stopForegroundLookup();
     geometryTracker?.dispose();
     void Promise.all([store ? save() : Promise.resolve(), ai ? ai.dispose() : Promise.resolve()])
-      .catch((error: unknown) => console.error('Nooki shutdown failed:', error))
+      .catch((error: unknown) => console.error('Miso shutdown failed:', error))
       .finally(() => { tray?.destroy(); app.quit(); });
   });
   void app.whenReady().then(start).catch((error: unknown) => {
-    console.error('Nooki startup failed:', error);
+    console.error('Miso startup failed:', error);
     stopForegroundLookup();
     geometryTracker?.dispose();
     quitting = true;

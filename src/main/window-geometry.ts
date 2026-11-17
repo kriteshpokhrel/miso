@@ -9,7 +9,7 @@ $ErrorActionPreference = 'Stop';
 Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
-public class NookiGeometry {
+public class MisoGeometry {
   [StructLayout(LayoutKind.Sequential)] public struct Rect { public int Left, Top, Right, Bottom; }
   [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] static extern IntPtr GetShellWindow();
@@ -32,7 +32,7 @@ public class NookiGeometry {
   }
 }
 '@
-while ($null -ne [Console]::ReadLine()) { [Console]::WriteLine([NookiGeometry]::Read(${process.pid})); }
+while ($null -ne [Console]::ReadLine()) { [Console]::WriteLine([MisoGeometry]::Read(${process.pid})); }
 `;
 
 export function parseWindowGeometry(value: unknown): WindowGeometry | null {

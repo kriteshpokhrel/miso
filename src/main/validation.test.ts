@@ -26,7 +26,7 @@ test('IPC rejects shutdown and dead senders before touching their frames or owne
       isDestroyed: () => false,
       get webContents(): typeof sender { throw new TypeError('Object has been destroyed'); },
     };
-    assert.throws(() => validateIpcSender(event, [owner], shuttingDown), /closed or Nooki is shutting down/);
+    assert.throws(() => validateIpcSender(event, [owner], shuttingDown), /closed or Miso is shutting down/);
   }
 });
 
@@ -69,7 +69,7 @@ test('new preference fields migrate only when absent', () => {
   assert.equal(validateSettings({ ...legacy, reducedMotion: true }).motionLevel, 'still');
   assert.equal(validateSettings(legacy).followWindow, true);
   assert.equal(validateSettings(legacy).petSpecies, 'cat');
-  for (const petSpecies of ['dog', 'panda', 'octopus', '__proto__', null, ['cat']]) {
+  for (const petSpecies of ['hamster', 'tiger', '__proto__', null, ['cat']]) {
     assert.throws(() => validateSettings({ ...DEFAULT_SETTINGS, petSpecies }));
   }
   for (const motionLevel of ['fast', '', null, true, ['gentle'], {}]) assert.throws(() => validateSettings({ ...DEFAULT_SETTINGS, motionLevel }));

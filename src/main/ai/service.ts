@@ -29,7 +29,7 @@ export class LocalAiService {
     try {
       this.onStatus(this.getStatus());
     } catch (error) {
-      console.error('[Nooki AI] Optional status observer failed; core pet behavior continues.', error);
+      console.error('[Miso AI] Optional status observer failed; core pet behavior continues.', error);
     }
   }
 
@@ -50,8 +50,8 @@ export class LocalAiService {
     this.maintenance++;
     const task = this.queue.then(operation).finally(() => { this.maintenance--; });
     this.queue = task.catch((error: unknown) => {
-      console.error('[Nooki AI] Optional model maintenance failed; core pet behavior continues.', error);
-      this.fail(error, 'Local AI maintenance failed. Restart Nooki or remove the model; scripted behavior remains available.');
+      console.error('[Miso AI] Optional model maintenance failed; core pet behavior continues.', error);
+      this.fail(error, 'Local AI maintenance failed. Restart Miso or remove the model; scripted behavior remains available.');
     });
     return task;
   }
@@ -202,8 +202,8 @@ export class LocalAiService {
         try {
           await resource.dispose();
         } catch (error) {
-          console.error('[Nooki AI] Failed to release optional inference resources; core pet behavior continues.', error);
-          this.fail(error, 'Could not fully release local AI resources. Restart Nooki to reclaim them; scripted behavior remains available.');
+          console.error('[Miso AI] Failed to release optional inference resources; core pet behavior continues.', error);
+          this.fail(error, 'Could not fully release local AI resources. Restart Miso to reclaim them; scripted behavior remains available.');
         }
       }
       // No history, model, context or native backend is retained between requests.

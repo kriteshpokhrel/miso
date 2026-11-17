@@ -3,12 +3,21 @@ import { test } from 'node:test';
 import type { PetState } from '../../shared/contracts.js';
 import { buildPetPrompt as buildCatPrompt, petPersonality, cleanComment, normalizeAppName } from './prompt.js';
 const CAT_PERSONALITY = petPersonality('cat');
+import { getSpecies } from '../../shared/species.js';
 
 const pet: PetState = {
   species: 'cat', mood: 'purring', hunger: 24.7, energy: 68, atHome: false, manualSleep: false,
   lastTickAt: 123, lastInteractionAt: 234, lastCommentAt: 345, reactionUntil: 456,
   disturbance: 0, lastDisturbedAt: 0, activeTimeMs: 0, lastBreakReminderAt: 0,
 };
+
+test('new companion prompts use the selected personality without adding captured context', () => {
+  for (const species of ['dog', 'panda', 'octopus'] as const) {
+    assert.ok(petPersonality(species).includes(getSpecies(species).personality));
+    const prompt = JSON.parse(buildCatPrompt('code.exe', { ...pet, species })!);
+    assert.deepEqual(prompt, { app: 'code.exe', species, mood: 'purring', hunger: 25, energy: 68 });
+  }
+});
 
 test('prompt projects only normalized process name and validated pet scalars, never extra context', () => {
   const untrusted = {
@@ -111,7 +120,7 @@ test('assistant identity, helpdesk boilerplate and role preambles fall back with
     '[INST] Write a cat comment. [/INST] Meow!',
   ]) assert.equal(cleanComment(response), null, response);
   for (const response of [
-    "I'm Nooki, your mischievous little cat!",
+    "I'm Miso, your mischievous little cat!",
     'Your keyboard looks cozy enough for a nap.',
     "I'm an expert at supervising snack breaks.",
     'That mouse looks suspiciously uncatchable.',

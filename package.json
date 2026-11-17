@@ -1,12 +1,12 @@
 {
-  "name": "nooki",
+  "name": "miso",
   "version": "0.1.0",
   "description": "A gentle, private desktop companion",
-  "author": "Nooki contributors",
+  "author": "Miso contributors",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/kriteshpokhrel/nooki.git"
+    "url": "https://github.com/kriteshpokhrel/miso.git"
   },
   "main": "dist/main/index.js",
   "type": "module",
@@ -33,8 +33,8 @@
     "typescript": "^5.8.0"
   },
   "build": {
-    "appId": "app.nooki.desktop",
-    "productName": "Nooki",
+    "appId": "app.miso.desktop",
+    "productName": "Miso",
     "publish": [],
     "asar": true,
     "asarUnpack": ["node_modules/node-llama-cpp/**", "node_modules/@node-llama-cpp/**"],

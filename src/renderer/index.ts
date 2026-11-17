@@ -1,14 +1,14 @@
-import type { CareAction, CoatColors, CoatPattern, CommentFrequency, MotionLevel, NookiApi, Settings, Snapshot } from '../shared/contracts.js';
+import type { CareAction, CoatColors, CoatPattern, CommentFrequency, MotionLevel, MisoApi, Settings, Snapshot } from '../shared/contracts.js';
 import { IDLE_MOTION } from '../shared/contracts.js';
-import { getSpecies, isSpeciesId, PET_SPECIES } from '../shared/species.js';
+import { getSpecies, PET_SPECIES, type SpeciesId } from '../shared/species.js';
+import { careOrbit } from '../shared/pet-ui.js';
 import { COAT_PALETTES } from './coats.js';
 import { COMMON_APPS } from '../shared/apps.js';
 
 declare global {
-  interface Window { nooki: NookiApi; }
+  interface Window { miso: MisoApi; }
   interface WindowEventMap {
-    'nooki:coat-preview': CustomEvent<{ snapshot: Snapshot; active: boolean }>;
-    'nooki:care-menu': CustomEvent<boolean>;
+    'miso:coat-preview': CustomEvent<{ snapshot: Snapshot; active: boolean }>;
   }
 }
 
@@ -18,12 +18,15 @@ function element<T extends HTMLElement>(id: string): T {
   return found as T;
 }
 
-const isSettings = new URLSearchParams(location.search).get('view') === 'settings';
-document.body.dataset.view = isSettings ? 'settings' : 'pet';
-element(isSettings ? 'settings-view' : 'pet-view').hidden = false;
-document.title = isSettings ? 'Nooki — Preferences' : 'Nooki';
+const requestedView = new URLSearchParams(location.search).get('view');
+const view = requestedView === 'settings' || requestedView === 'care' || requestedView === 'speech' ? requestedView : 'pet';
+const isSettings = view === 'settings';
+const isCare = view === 'care';
+document.body.dataset.view = view;
+element(`${view}-view`).hidden = false;
+document.title = isSettings ? 'Miso — Preferences' : 'Miso';
 
-const api = window.nooki;
+const api = window.miso;
 const form = element<HTMLFormElement>('settings-form');
 const saveButton = element<HTMLButtonElement>('save-button');
 const saveStatus = element('save-status');
@@ -34,7 +37,6 @@ const cancelButton = element<HTMLButtonElement>('cancel-download-button');
 const removeButton = element<HTMLButtonElement>('remove-model-button');
 const cat = element('cat');
 const inputs = {
-  petSpecies: element<HTMLSelectElement>('pet-species'),
   launchAtLogin: element<HTMLInputElement>('launch-at-login'),
   commentFrequency: element<HTMLSelectElement>('comment-frequency'),
   motionLevel: element<HTMLSelectElement>('motion-level'),
@@ -61,12 +63,60 @@ let careBusy = false;
 let snapshotEvents = 0;
 let localError = '';
 let coatPage = true;
+let careWasOpen = false;
 const coatKeys: Array<keyof CoatColors> = ['coatPattern', 'coatColor', 'accentColor'];
-inputs.petSpecies.replaceChildren(...Object.entries(PET_SPECIES).map(([id, definition]) => new Option(definition.label, id)));
+const speciesChoices = Object.entries(PET_SPECIES).map(([id, definition]) => {
+  const button = document.createElement('button');
+  button.id = `choose-${id}`;
+  button.type = 'button';
+  button.className = 'species-choice secondary';
+  button.dataset.species = id;
+  button.textContent = definition.label;
+  button.setAttribute('role', 'radio');
+  button.setAttribute('aria-checked', 'false');
+  button.tabIndex = -1;
+  button.disabled = true;
+  button.addEventListener('click', () => chooseSpecies(id as SpeciesId));
+  return button;
+});
+element('pet-species').replaceChildren(...speciesChoices);
+
+function renderSpecies(): void {
+  for (const choice of speciesChoices) {
+    const selected = choice.dataset.species === draft?.petSpecies;
+    choice.setAttribute('aria-checked', String(selected));
+    choice.tabIndex = selected ? 0 : -1;
+    choice.disabled = !draft;
+  }
+}
+
+function chooseSpecies(id: SpeciesId): void {
+  if (!draft) return;
+  if (draft.petSpecies !== id) {
+    draft.petSpecies = id;
+    dirty.set('petSpecies', ++revision);
+    saveStatus.textContent = 'Unsaved changes';
+    updateSaveState();
+    renderCoat();
+  }
+  renderSpecies();
+}
+
+element('pet-species').addEventListener('keydown', event => {
+  if (!draft || !['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+  event.preventDefault();
+  const current = speciesChoices.findIndex(choice => choice.dataset.species === draft!.petSpecies);
+  const index = event.key === 'Home' ? 0 : event.key === 'End' ? speciesChoices.length - 1
+    : (current + (event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1) + speciesChoices.length) % speciesChoices.length;
+  const choice = speciesChoices[index]!;
+  chooseSpecies(choice.dataset.species as SpeciesId);
+  choice.focus();
+});
 
 function renderCoat(): void {
   if (!draft || !snapshot || !isSettings) return;
   showText('species-personality', getSpecies(draft.petSpecies).personality);
+  element('coat-preview').setAttribute('aria-label', `Live 3D preview of Miso the ${getSpecies(draft.petSpecies).label.toLowerCase()}`);
   inputs.accentColor.disabled = draft.coatPattern === 'single';
   showText('coat-color-value', draft.coatColor.toUpperCase());
   showText('accent-color-value', draft.accentColor.toUpperCase());
@@ -76,7 +126,7 @@ function renderCoat(): void {
     button.disabled = false;
     button.setAttribute('aria-pressed', String(draft.coatColor === palette.coatColor && draft.accentColor === palette.accentColor));
   }
-  window.dispatchEvent(new CustomEvent('nooki:coat-preview', {
+  window.dispatchEvent(new CustomEvent('miso:coat-preview', {
     detail: {
       active: coatPage,
       snapshot: {
@@ -101,7 +151,7 @@ function describeError(error: unknown): string {
 
 function renderError(): void {
   const message = localError || snapshot?.error || '';
-  const target = element(isSettings ? 'settings-error' : 'pet-error');
+  const target = element(`${view}-error`);
   target.textContent = message;
   target.hidden = !message;
 }
@@ -164,7 +214,7 @@ function writeInput(key: SettingKey, settings: Settings): void {
   } else if (key === 'motionLevel') {
     inputs.motionLevel.value = settings.motionLevel;
   } else if (key === 'petSpecies') {
-    inputs.petSpecies.value = settings.petSpecies;
+    renderSpecies();
   } else if (key === 'petSize') {
     inputs.petSize.value = String(settings.petSize);
   } else if (key === 'coatColor' || key === 'accentColor' || key === 'coatPattern') {
@@ -176,7 +226,7 @@ function writeInput(key: SettingKey, settings: Settings): void {
 
 function syncSettings(next: Settings): void {
   if (!draft) draft = { ...next, allowedApps: [...next.allowedApps] };
-  for (const key of Object.keys(inputs) as SettingKey[]) {
+  for (const key of [...Object.keys(inputs), 'petSpecies'] as SettingKey[]) {
     // Background snapshots must never replace a field the user is editing.
     if (dirty.has(key)) continue;
     if (key === 'allowedApps') draft.allowedApps = [...next.allowedApps];
@@ -197,18 +247,38 @@ function renderPet(next: Snapshot): void {
   const mood = next.pet.mood;
   cat.dataset.mood = mood;
   cat.dataset.moving = String(next.moving);
-  const activity = mood === 'home' ? 'going home' : mood === 'mimicking' ? 'pretending to work on a tiny laptop' : mood === 'irritated' ? 'theatrically grumpy' : mood;
-  cat.setAttribute('aria-label', `Nooki, a ${getSpecies(next.pet.species).label.toLowerCase()}, is ${activity}. Open care menu.`);
-  const speech = next.comment || '';
-  showText('speech', speech);
-  element('speech').hidden = !speech;
+  const definition = getSpecies(next.pet.species);
+  const speciesLabel = definition.label.toLowerCase();
+  const article = /^[aeiou]/i.test(speciesLabel) ? 'an' : 'a';
+  const activity = mood === 'home' ? 'going home' : mood === 'mimicking' ? 'pretending to work on a tiny laptop'
+    : mood === 'irritated' ? 'theatrically grumpy' : mood === 'purring' ? definition.affectionLabel : mood;
+  cat.setAttribute('aria-label', `Miso, ${article} ${speciesLabel}, is ${activity}. Open care menu.`);
   cat.dataset.speaking = String(Boolean(next.comment));
   const atHome = next.pet.atHome || mood === 'home';
   showText('sleep-action-label', mood === 'sleeping' ? 'Wake' : 'Sleep');
-  element('care-sleep').setAttribute('aria-label', mood === 'sleeping' ? 'Wake Nooki' : 'Let Nooki sleep');
+  element('care-sleep').setAttribute('aria-label', mood === 'sleeping' ? 'Wake Miso' : 'Let Miso sleep');
   cat.setAttribute('aria-busy', String(careBusy));
   cat.setAttribute('aria-disabled', String(atHome));
-  if (atHome) closePetMenu();
+  cat.setAttribute('aria-expanded', String(next.careMenuOpen));
+  if (atHome && (menuRequested || next.careMenuOpen)) closePetMenu();
+}
+
+function renderCare(next: Snapshot): void {
+  const affection = next.pet.species === 'cat' || next.pet.species === 'dog' ? 'Scritches' : 'Pats';
+  showText('pet-action-label', affection);
+  element('care-pet').setAttribute('aria-label', `Give Miso ${affection.toLowerCase()}`);
+  const roam = next.settings.stayPut || next.settings.motionLevel === 'still';
+  showText('stay-action-label', roam ? 'Roam' : 'Stay');
+  element('care-stay').setAttribute('aria-label', roam ? 'Let Miso roam' : 'Keep Miso here');
+  element('care-follow').setAttribute('aria-checked', String(next.settings.followWindow));
+  showText('sleep-action-label', next.pet.mood === 'sleeping' ? 'Wake' : 'Sleep');
+  element('care-sleep').setAttribute('aria-label', next.pet.mood === 'sleeping' ? 'Wake Miso' : 'Let Miso sleep');
+  const wasOpen = !petMenu.hidden;
+  petMenu.hidden = !isCare || !next.careMenuOpen;
+  if (next.careMenuOpen) menuRequested = true;
+  else if (careWasOpen) menuRequested = false;
+  careWasOpen = next.careMenuOpen;
+  if (isCare && next.careMenuOpen && !wasOpen) menuButtons[0]!.focus();
 }
 
 function renderModel(next: Snapshot): void {
@@ -254,12 +324,22 @@ function receive(next: Snapshot): void {
   if (isSettings) {
     if (firstSnapshot) form.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('input, select, textarea').forEach(control => { control.disabled = false; });
     syncSettings(next.settings);
-    showText('presence-text', next.pet.atHome ? 'Nooki is resting at home. Needs and comments are paused.' : `Nooki is ${next.pet.mood === 'idle' ? 'keeping you company' : next.pet.mood}.`);
+    const activity = next.pet.mood === 'idle' ? 'keeping you company'
+      : next.pet.mood === 'purring' ? getSpecies(next.pet.species).affectionLabel : next.pet.mood;
+    showText('presence-text', next.pet.atHome ? 'Miso is resting at home. Needs and comments are paused.' : `Miso is ${activity}.`);
     showText('login-note', next.packaged ? 'Launch at sign-in, ready to keep you company.' : 'Launch at sign-in is packaged-app only. This preference is saved, but unavailable in development.');
     renderModel(next);
     element('system-motion-note').hidden = !next.systemReducedMotion;
     showText('window-follow-status', next.windowFollowing);
-  } else renderPet(next);
+  } else {
+    if (view === 'pet') renderPet(next);
+    renderCare(next);
+    const speech = view === 'speech' && !next.careMenuOpen ? next.comment || '' : '';
+    showText('speech', speech);
+    element('speech').hidden = !speech;
+    document.body.dataset.speechBelow = String(next.speechBelow);
+    element('speech').style.setProperty('--speech-anchor', `${next.speechAnchor}px`);
+  }
   renderError();
 }
 
@@ -273,7 +353,7 @@ async function operation(task: () => Promise<unknown>, failure: string): Promise
   }
 }
 
-for (const key of Object.keys(inputs) as SettingKey[]) {
+for (const key of Object.keys(inputs) as Array<keyof typeof inputs>) {
   inputs[key].addEventListener(key === 'allowedApps' || key === 'coatColor' || key === 'accentColor' ? 'input' : 'change', () => {
     if (!draft) return;
     dirty.set(key, ++revision);
@@ -286,9 +366,6 @@ for (const key of Object.keys(inputs) as SettingKey[]) {
       draft.petSize = Number(inputs.petSize.value);
     } else if (key === 'motionLevel') {
       draft.motionLevel = inputs.motionLevel.value as MotionLevel;
-    } else if (key === 'petSpecies') {
-      if (!isSpeciesId(inputs.petSpecies.value)) return;
-      draft.petSpecies = inputs.petSpecies.value;
     } else if (key === 'coatPattern') {
       draft.coatPattern = inputs.coatPattern.value as CoatPattern;
     } else if (key === 'coatColor' || key === 'accentColor') {
@@ -370,7 +447,7 @@ function petCat(action: CareAction = 'pet'): void {
   if (!api || careBusy || !snapshot || snapshot.pet.atHome || snapshot.pet.mood === 'home') return;
   careBusy = true;
   renderPet(snapshot);
-  void operation(async () => receive(await (action === 'pet' && snapshot?.pet.mood === 'sleeping' ? api.setSleeping(false) : api.care(action))), 'Nooki could not react. Try again.').finally(() => {
+  void operation(async () => receive(await (action === 'pet' && snapshot?.pet.mood === 'sleeping' ? api.setSleeping(false) : api.care(action))), 'Miso could not react. Try again.').finally(() => {
     careBusy = false;
     if (snapshot) renderPet(snapshot);
   });
@@ -391,7 +468,7 @@ let drag: DragSession | undefined;
 let finishingDrag = false;
 
 function dragError(error: unknown): void {
-  localError = `Could not move Nooki. Try dragging again. ${describeError(error)}`;
+  localError = `Could not move Miso. Try dragging again. ${describeError(error)}`;
   renderError();
 }
 
@@ -416,7 +493,7 @@ async function finishDrag(cancelled: boolean): Promise<void> {
 }
 
 cat.addEventListener('pointerdown', event => {
-  if (!api || !snapshot || isSettings || event.button !== 0 || !event.isPrimary || drag || finishingDrag || snapshot.pet.atHome || snapshot.pet.mood === 'home') return;
+  if (!api || !snapshot || view !== 'pet' || snapshot.careMenuOpen || event.button !== 0 || !event.isPrimary || drag || finishingDrag || snapshot.pet.atHome || snapshot.pet.mood === 'home') return;
   event.preventDefault();
   if (document.activeElement === cat) cat.blur();
   closePetMenu();
@@ -457,30 +534,31 @@ cat.addEventListener('pointercancel', event => {
 cat.addEventListener('lostpointercapture', event => {
   if (event.pointerId === drag?.pointerId) void finishDrag(true);
 });
-window.addEventListener('blur', () => { closePetMenu(); void finishDrag(true); });
+window.addEventListener('blur', () => { if (isCare) closePetMenu(); void finishDrag(true); });
 
 const petMenu = element('pet-menu');
-const menuButtons = ['care-feed', 'care-play', 'care-sleep', 'care-home', 'care-settings'].map(id => element<HTMLButtonElement>(id));
-menuButtons.forEach((button, index) => {
-  const angle = Math.PI + index * Math.PI / (menuButtons.length - 1);
-  button.style.setProperty('--orbit-x', `${150 + Math.cos(angle) * 128}px`);
-  button.style.setProperty('--orbit-y', `${160 + Math.sin(angle) * 128}px`);
-});
+const menuButtons = ['care-feed', 'care-pet', 'care-play', 'care-sleep', 'care-stay', 'care-follow', 'care-home', 'care-settings'].map(id => element<HTMLButtonElement>(id));
+function positionCare(): void {
+  menuButtons.forEach((button, index) => {
+    const point = careOrbit(index, menuButtons.length, window.innerWidth);
+    button.style.setProperty('--orbit-x', `${point.x}px`);
+    button.style.setProperty('--orbit-y', `${point.y}px`);
+  });
+}
+positionCare();
+window.addEventListener('resize', positionCare);
 let menuRequested = false;
 let menuVersion = 0;
 petMenu.hidden = true;
 function closePetMenu(restoreFocus = false): void {
-  const wasOpen = menuRequested;
+  const wasOpen = menuRequested || Boolean(snapshot?.careMenuOpen);
   menuRequested = false;
   menuVersion++;
   petMenu.hidden = true;
-  cat.setAttribute('aria-expanded', 'false');
-  window.dispatchEvent(new CustomEvent('nooki:care-menu', { detail: false }));
-  if (wasOpen) void operation(() => api.setCareMenuOpen(false), 'Could not resume Nooki. Reopen and close care to retry.');
-  if (restoreFocus) cat.focus({ preventScroll: true });
+  if (wasOpen) void operation(() => api.setCareMenuOpen(false, restoreFocus), 'Could not resume Miso. Reopen and close care to retry.');
 }
 function openPetMenu(keyboard = false): void {
-  if (!api || isSettings || !snapshot || snapshot.pet.atHome) return;
+  if (!api || view !== 'pet' || !snapshot || snapshot.pet.atHome || snapshot.pet.mood === 'home') return;
   if (menuRequested) { closePetMenu(keyboard); return; }
   menuRequested = true;
   const version = ++menuVersion;
@@ -489,24 +567,32 @@ function openPetMenu(keyboard = false): void {
     if (version !== menuVersion) return;
     await api.setCareMenuOpen(true);
     if (version !== menuVersion) return;
-    window.dispatchEvent(new CustomEvent('nooki:care-menu', { detail: true }));
-    petMenu.hidden = false;
-    cat.setAttribute('aria-expanded', 'true');
-    if (keyboard) menuButtons[0]!.focus();
-  }, 'Could not open Nooki’s care menu. Try again.');
+  }, 'Could not open Miso’s care menu. Try again.');
 }
-for (const action of ['feed', 'play'] as const) {
+for (const action of ['feed', 'pet', 'play'] as const) {
   element(`care-${action}`).addEventListener('click', () => { closePetMenu(); petCat(action); });
 }
-element('care-home').addEventListener('click', () => { closePetMenu(); void operation(() => api.goHome(), 'Could not send Nooki home.'); });
+element('care-home').addEventListener('click', () => { closePetMenu(); void operation(() => api.goHome(), 'Could not send Miso home.'); });
 element('care-sleep').addEventListener('click', () => {
   if (!snapshot || careBusy) return;
   closePetMenu();
   careBusy = true;
-  void operation(async () => receive(await api.setSleeping(snapshot!.pet.mood !== 'sleeping')), 'Could not change Nooki’s sleep. Try again.')
+  void operation(async () => receive(await api.setSleeping(snapshot!.pet.mood !== 'sleeping')), 'Could not change Miso’s sleep. Try again.')
     .finally(() => { careBusy = false; if (snapshot) renderPet(snapshot); });
 });
 element('care-settings').addEventListener('click', () => { closePetMenu(); void operation(() => api.openSettings(), 'Could not open settings.'); });
+element('care-stay').addEventListener('click', () => {
+  if (!snapshot) return;
+  const stay = !(snapshot.settings.stayPut || snapshot.settings.motionLevel === 'still');
+  closePetMenu();
+  void operation(async () => receive(await api.setStayPut(stay)), 'Could not change Miso’s roaming. Try again.');
+});
+element('care-follow').addEventListener('click', () => {
+  if (!snapshot) return;
+  const follow = !snapshot.settings.followWindow;
+  closePetMenu();
+  void operation(async () => receive(await api.setFollowing(follow)), 'Could not change window following. Try again.');
+});
 petMenu.addEventListener('keydown', event => {
   if (event.key === 'Escape' || event.key === 'Tab') {
     if (event.key === 'Escape') event.preventDefault();
@@ -521,7 +607,7 @@ petMenu.addEventListener('keydown', event => {
 });
 window.addEventListener('pointerdown', event => {
   const path = event.composedPath();
-  if (!path.includes(petMenu) && !path.includes(cat)) closePetMenu();
+  if ((isCare || view === 'pet') && !path.includes(petMenu) && !path.includes(cat)) closePetMenu();
 });
 cat.addEventListener('contextmenu', event => {
   event.preventDefault();
@@ -538,7 +624,7 @@ cat.addEventListener('keydown', event => {
   }
 });
 element('restore-button').addEventListener('click', () => {
-  void operation(() => api.restore(), 'Could not bring Nooki back. Try again.');
+  void operation(() => api.restore(), 'Could not bring Miso back. Try again.');
 });
 consent.addEventListener('change', () => { if (snapshot) renderModel(snapshot); });
 
@@ -571,7 +657,7 @@ removeButton.addEventListener('click', () => {
 });
 
 if (!api) {
-  localError = 'Nooki’s desktop connection is unavailable. Reopen this window from the app.';
+  localError = 'Miso’s desktop connection is unavailable. Reopen this window from the app.';
   renderError();
   cat.setAttribute('aria-disabled', 'true');
   cat.tabIndex = -1;
@@ -584,5 +670,5 @@ if (!api) {
   void operation(async () => {
     const initial = await api.getSnapshot();
     if (snapshotEvents === initialEventCount) receive(initial);
-  }, 'Could not load Nooki. Reopen this window to try again.');
+  }, 'Could not load Miso. Reopen this window to try again.');
 }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { care, createPet, tick } from './pet.js';
-import { getSpecies, type SpeciesDefinition } from '../shared/species.js';
+import { care, createPet, setHome, setSleeping, scriptedComment, tick } from './pet.js';
+import { getSpecies, PET_SPECIES, type SpeciesDefinition, type SpeciesId } from '../shared/species.js';
 
 test('species strategies override needs, care effects and reactions without changing the engine', () => {
   const original = getSpecies('cat');
@@ -20,4 +20,25 @@ test('species strategies override needs, care effects and reactions without chan
   assert.equal(reaction.mood, 'playing');
   assert.equal(reaction.reactionUntil, 1234);
   assert.equal(care(pet, 'pet', 0).mood, 'purring');
+});
+
+test('every implemented species uses its own needs and care without losing sleep or Home guarantees', () => {
+  for (const species of Object.keys(PET_SPECIES) as SpeciesId[]) {
+    const definition = getSpecies(species);
+    const pet = createPet(0, species);
+    const advanced = tick(pet, 1000);
+    assert.equal(advanced.hunger, pet.hunger + definition.needs.hungerPerSecond);
+    assert.equal(advanced.energy, pet.energy - definition.needs.energyDrainPerSecond);
+    assert.ok(care(pet, 'feed', 0).hunger < pet.hunger);
+    assert.equal(care(pet, 'pet', 0).mood, 'purring');
+    assert.equal(care(pet, 'play', 0).mood, 'playing');
+    const sleeping = tick(setSleeping(pet, true, 0), 120_000);
+    assert.equal(sleeping.mood, 'sleeping');
+    assert.ok(sleeping.energy > pet.energy);
+    const home = tick(setHome(pet, true, 0), 120_000);
+    assert.equal(home.hunger, pet.hunger);
+    assert.equal(home.energy, pet.energy);
+    const hungry = { ...pet, hunger: 90 };
+    assert.equal(scriptedComment(hungry, 'quiet', 120_000, 0), definition.comments.hungry[0]);
+  }
 });

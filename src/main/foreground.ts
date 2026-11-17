@@ -6,10 +6,10 @@ import { WindowsLineReader } from './windows-line-reader.js';
 const run = promisify(execFile);
 const WINDOWS_QUERY = `
 $ErrorActionPreference = 'Stop';
-Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class NookiForeground { [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow(); [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint id); }';
+Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class MisoForeground { [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow(); [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint id); }';
 while ($null -ne [Console]::ReadLine()) {
   $processIdValue = [uint32]0;
-  [void][NookiForeground]::GetWindowThreadProcessId([NookiForeground]::GetForegroundWindow(), [ref]$processIdValue);
+  [void][MisoForeground]::GetWindowThreadProcessId([MisoForeground]::GetForegroundWindow(), [ref]$processIdValue);
   if ($processIdValue -eq 0) { throw 'No foreground process is available.'; }
   $p = Get-Process -Id $processIdValue -ErrorAction Stop;
   [Console]::WriteLine($p.ProcessName + '.exe');

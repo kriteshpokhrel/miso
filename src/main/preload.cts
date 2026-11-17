@@ -1,0 +1,24 @@
+import { contextBridge, ipcRenderer } from 'electron';
+import type { NookiApi, Snapshot } from '../shared/contracts.js';
+
+const api: NookiApi = {
+  getSnapshot: () => ipcRenderer.invoke('nooki:snapshot'),
+  care: (action) => ipcRenderer.invoke('nooki:care', action),
+  goHome: () => ipcRenderer.invoke('nooki:home'),
+  restore: () => ipcRenderer.invoke('nooki:restore'),
+  openSettings: () => ipcRenderer.invoke('nooki:settings'),
+  updateSettings: (settings) => ipcRenderer.invoke('nooki:update-settings', settings),
+  downloadModel: (consent) => ipcRenderer.invoke('nooki:download-model', consent),
+  cancelModelDownload: () => ipcRenderer.invoke('nooki:cancel-model'),
+  removeModel: () => ipcRenderer.invoke('nooki:remove-model'),
+  startDrag: () => ipcRenderer.invoke('nooki:drag-start'),
+  dragPet: () => ipcRenderer.invoke('nooki:drag'),
+  endDrag: () => ipcRenderer.invoke('nooki:drag-end'),
+  openPetMenu: () => ipcRenderer.invoke('nooki:pet-menu'),
+  onSnapshot: (listener) => {
+    const handler = (_event: Electron.IpcRendererEvent, snapshot: Snapshot): void => listener(snapshot);
+    ipcRenderer.on('nooki:snapshot', handler);
+    return () => { ipcRenderer.removeListener('nooki:snapshot', handler); };
+  },
+};
+contextBridge.exposeInMainWorld('nooki', Object.freeze(api));

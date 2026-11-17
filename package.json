@@ -1,0 +1,56 @@
+{
+  "name": "nooki",
+  "version": "0.1.0",
+  "description": "A gentle, private desktop companion",
+  "author": "Nooki contributors",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kriteshpokhrel/nooki.git"
+  },
+  "main": "dist/main/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && esbuild src/renderer/index.ts --bundle --format=iife --platform=browser --outfile=dist/renderer/index.js && node scripts/copy-assets.mjs",
+    "start": "npm run build && electron .",
+    "test": "tsx --test src/domain/*.test.ts src/main/*.test.ts src/main/ai/*.test.ts src/renderer/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "smoke": "npm run build && electron . --smoke-test",
+    "pack": "npm run build && electron-builder --dir --publish never",
+    "dist": "npm run build && electron-builder --publish never"
+  },
+  "dependencies": {
+    "node-llama-cpp": "3.22.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "electron": "45.3.3",
+    "electron-builder": "26.18.0",
+    "esbuild": "^0.25.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0"
+  },
+  "build": {
+    "appId": "app.nooki.desktop",
+    "productName": "Nooki",
+    "publish": [],
+    "asar": true,
+    "asarUnpack": ["node_modules/node-llama-cpp/**", "node_modules/@node-llama-cpp/**"],
+    "files": [
+      "dist/**",
+      "package.json",
+      "!node_modules/@node-llama-cpp/*cuda*/**",
+      "!node_modules/@node-llama-cpp/*vulkan*/**",
+      "!node_modules/node-llama-cpp/llama/gitRelease.bundle",
+      "!node_modules/node-llama-cpp/llama/xpack/**"
+    ],
+    "directories": { "output": "release" },
+    "win": { "target": "nsis" },
+    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true },
+    "mac": {
+      "target": ["dmg", "zip"],
+      "category": "public.app-category.entertainment",
+      "hardenedRuntime": true
+    }
+  }
+}

@@ -3,7 +3,7 @@
 THESIS: A little companion, not another dashboard. The cat owns the desktop; settings stay practical.
 OWN-WORLD: Sage paper, slate ink, sculpted lilac fur, an apricot ear and glossy violet eyes beside crisp system controls.
 STORY: Meet Nooki, offer a little care, then choose how quietly they keep you company. Local AI is an explicit extra.
-FIRST VIEWPORT: Only a full-bodied cat on a transparent 300px stage, with occasional speech above. Tap to pet, drag to move, or open native care options. Settings explain the gestures and keep playful labels clear.
+FIRST VIEWPORT: Only a full-bodied pet on a transparent stage, with occasional speech and a five-action upper care arc. Settings use quiet sidebar selection, a compact coat editor and opt-in app checkboxes.
 FORM: Approved compact utility sheet and original real-time 3D character; user-pinned direction, no borrowed mascot.
 -->
 <html lang="en">
@@ -20,9 +20,16 @@ FORM: Approved compact utility sheet and original real-time 3D character; user-p
     <main id="pet-view" hidden aria-label="Nooki desktop companion">
       <p id="speech" class="speech" role="status" aria-live="polite" hidden></p>
       <p id="pet-instructions" class="sr-only">Tap to pet. Drag to move. Right-click, Enter, Shift+F10 or the Menu key opens care and settings.</p>
-      <div id="cat" class="cat" data-mood="idle" role="button" tabindex="0" aria-haspopup="menu" aria-describedby="pet-instructions" aria-label="Nooki, a lilac cat, is resting. Open care menu.">
+      <div id="cat" class="cat" data-mood="idle" role="button" tabindex="0" aria-haspopup="menu" aria-expanded="false" aria-controls="pet-menu" aria-describedby="pet-instructions" aria-label="Nooki, a cat, is resting. Open care menu.">
         <canvas id="pet-canvas" aria-hidden="true"></canvas>
       </div>
+      <nav id="pet-menu" class="pet-orbit" role="menu" aria-label="Care for Nooki" hidden>
+        <button id="care-feed" type="button" role="menuitem" aria-label="Feed Nooki" title="Feed"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11h18l-3 8H6zM8 7l1-3m6 3 1-3M2 20h20"/></svg><span>Feed</span></button>
+        <button id="care-play" type="button" role="menuitem" aria-label="Play with Nooki" title="Play"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M5 6c9 0 13 5 13 12M4 16c3-7 9-11 15-10M8 21c-1-8 3-14 8-17"/></svg><span>Play</span></button>
+        <button id="care-sleep" type="button" role="menuitem" aria-label="Let Nooki sleep" title="Sleep"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15a9 9 0 0 1-11-11 9 9 0 1 0 11 11ZM16 3h5l-5 5h5"/></svg><span id="sleep-action-label">Sleep</span></button>
+        <button id="care-home" type="button" role="menuitem" aria-label="Send Nooki home" title="Home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m2 11 10-9 10 9M5 9v12h14V9M9 21v-8h6v8"/></svg><span>Home</span></button>
+        <button id="care-settings" type="button" role="menuitem" aria-label="Open Nooki settings" title="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 3 1-2h4l1 2 3 2 3 1v4l-2 2 1 3-1 3-3 1-2 3h-4l-2-3-3-1-1-3 1-3-2-2V6l3-1z" transform="translate(1 1) scale(.9)"/><circle cx="12" cy="12" r="3"/></svg><span>Settings</span></button>
+      </nav>
       <p id="pet-error" class="pet-error" role="alert" hidden></p>
       <p id="pet-render-error" class="pet-error" role="alert" hidden></p>
     </main>
@@ -33,61 +40,59 @@ FORM: Approved compact utility sheet and original real-time 3D character; user-p
       </header>
       <div class="presence"><span class="presence-dot" aria-hidden="true"></span><p id="presence-text" role="status">Getting to know Nooki…</p><span id="mode-label">Scripted companion</span></div>
       <nav class="settings-pages" aria-label="Settings pages">
-        <button id="company-page" type="button" class="secondary" aria-pressed="true" aria-controls="company-panel">Everyday company</button>
-        <button id="coat-page" type="button" class="secondary" aria-pressed="false" aria-controls="coat-panel">Coat closet</button>
+        <button id="coat-page" type="button" class="secondary" aria-pressed="true" aria-controls="coat-panel">Pets</button>
+        <button id="company-page" type="button" class="secondary" aria-pressed="false" aria-controls="company-panel">General</button>
       </nav>
-      <p id="gesture-hint" class="gesture-hint">Right-click Nooki for care and settings. Drag to move; tap to pet. Keyboard: focus Nooki and press Enter for the care menu.</p>
+      <p id="gesture-hint" class="gesture-hint">Tap for scritches. Drag to carry. Right-click for care. Tap a sleeping pet to wake up.</p>
       <p id="settings-error" class="notice error" role="alert" hidden></p>
       <form id="settings-form" novalidate>
-        <div id="company-panel">
+        <div id="company-panel" hidden>
         <section aria-labelledby="everyday-heading">
-          <h2 id="everyday-heading">Everyday company</h2>
+          <h2 id="everyday-heading">At your service</h2>
           <div class="setting-row">
             <div><label for="launch-at-login">Morning pounce</label><p id="login-note">Launch at sign-in, ready to keep you company.</p></div>
             <input id="launch-at-login" type="checkbox" aria-describedby="login-note">
           </div>
-          <div class="setting-row">
-            <div><label for="comment-frequency">Talkativeness</label><p id="frequency-note">Comment frequency. Care reactions still work when comments are off.</p></div>
-            <select id="comment-frequency" aria-describedby="frequency-note"><option value="off">Comments off</option><option value="quiet">Quiet</option><option value="balanced">Balanced</option><option value="chatty">Chatty</option></select>
-          </div>
-          <div class="setting-row">
-            <div><label for="reduced-motion">Easy paws</label><p id="motion-note">Reduced motion: less wandering and no animated reactions.</p></div>
-            <input id="reduced-motion" type="checkbox" aria-describedby="motion-note">
-          </div>
-          <div class="setting-row">
-            <div><label for="pet-size">Pocket or pounce?</label><p id="size-note">Pet size. Pick a little desk buddy or a bigger presence.</p></div>
-            <select id="pet-size" aria-describedby="size-note"><option value="0.7">Pocket · 70%</option><option value="1">Just right · 100%</option><option value="1.3">Big paws · 130%</option><option value="1.5">Full pounce · 150%</option></select>
-          </div>
-          <div class="setting-row">
-            <div><label for="break-reminders">Stretch those paws</label><p id="break-note">A loving break reminder after 45 minutes of active companion time. Paused at home.</p></div>
-            <input id="break-reminders" type="checkbox" aria-describedby="break-note">
-          </div>
         </section>
         <section aria-labelledby="privacy-heading">
-          <h2 id="privacy-heading">A small, private world</h2>
-          <p>Nooki works without AI. Optional local AI can make comments about apps you choose below—never window titles, documents or what you type.</p>
-          <label for="allowed-apps" class="field-label">Apps Nooki may recognize</label>
-          <p id="apps-hint" class="field-hint">One process name per line, for example Code.exe or Safari. Up to 30 names, 80 characters each; not file paths. Leave empty to share no app names.</p>
-          <textarea id="allowed-apps" rows="3" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="Code.exe&#10;Safari" aria-describedby="apps-hint apps-error"></textarea>
-          <p id="apps-error" class="field-error" hidden></p>
+          <h2 id="privacy-heading">Apps Nooki may recognize</h2>
+          <p>Choose app names for optional local comments. Never window titles or contents. Nothing is selected by default.</p>
+          <fieldset class="app-presets" aria-label="Allow app names">
+            <label><input id="app-chrome" type="checkbox">Chrome</label>
+            <label><input id="app-code" type="checkbox">Visual Studio Code</label>
+            <label><input id="app-outlook" type="checkbox">Outlook</label>
+            <label><input id="app-edge" type="checkbox">Edge</label>
+            <label><input id="app-firefox" type="checkbox">Firefox</label>
+            <label><input id="app-slack" type="checkbox">Slack</label>
+            <label><input id="app-teams" type="checkbox">Teams</label>
+            <label><input id="app-terminal" type="checkbox">Terminal</label>
+            <label><input id="app-idea" type="checkbox">IntelliJ IDEA</label>
+            <label><input id="app-github" type="checkbox">GitHub Desktop</label>
+          </fieldset>
+          <details id="custom-apps" class="custom-apps"><summary>Add another app by process name</summary>
+            <label for="allowed-apps" class="field-label">Other apps</label>
+            <p id="apps-hint" class="field-hint">One process name per line, not a file path. Up to 30 names total, 80 characters each.</p>
+            <textarea id="allowed-apps" rows="3" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="devenv.exe&#10;Safari" aria-describedby="apps-hint apps-error"></textarea>
+            <p id="apps-error" class="field-error" hidden></p>
+          </details>
           <div class="setting-row ai-row">
             <div><label for="ai-enabled">Use local AI for comments</label><p id="ai-note">Off by default. Requires the optional model below.</p></div>
             <input id="ai-enabled" type="checkbox" aria-describedby="ai-note">
           </div>
         </section>
         </div>
-        <section id="coat-panel" aria-labelledby="coat-heading" hidden>
-          <h2 id="coat-heading">Nooki, in your colors.</h2>
-          <p>One cozy coat or a little contrast. Try a palette, then make it hers.</p>
+        <section id="coat-panel" aria-labelledby="coat-heading">
+          <h2 id="coat-heading">Make yourself at home</h2>
+          <div class="selected-pet"><div><label for="pet-species" class="field-label">Your pet</label><p id="species-personality" class="field-hint">Affectionate. Playful. A little mischievous.</p></div><select id="pet-species" aria-describedby="species-personality"><option value="cat">Cat</option></select></div>
           <div class="coat-editor">
             <figure class="coat-preview">
               <div class="coat-stage"><canvas id="coat-preview" role="img" aria-label="Live 3D preview of Nooki’s coat"></canvas></div>
-              <figcaption>Just trying it on. Save to wear it on the desktop.</figcaption>
+              <figcaption>Preview · changes apply when saved</figcaption>
             </figure>
             <div class="coat-fields">
               <label for="coat-pattern" class="field-label">A little contrast?</label>
               <select id="coat-pattern" aria-describedby="coat-pattern-note"><option value="single">Single tone</option><option value="dual">Dual tone</option></select>
-              <p id="coat-pattern-note" class="field-hint">Dual tone adds a contrasting ear, muzzle, chest and paw tips.</p>
+              <p id="coat-pattern-note" class="field-hint">One color, or a little contrast.</p>
               <div class="coat-color-row">
                 <div><label for="coat-color">Coat color</label><output id="coat-color-value" for="coat-color"></output></div>
                 <input id="coat-color" type="color" aria-describedby="coat-color-value" value="#bda6df">
@@ -96,7 +101,7 @@ FORM: Approved compact utility sheet and original real-time 3D character; user-p
                 <div><label for="accent-color">Contrast color</label><output id="accent-color-value" for="accent-color"></output></div>
                 <input id="accent-color" type="color" aria-describedby="accent-color-value accent-note" value="#fff0d9">
               </div>
-              <p id="accent-note" class="field-hint">Your contrast color is kept when you switch to single tone.</p>
+              <p id="accent-note" class="sr-only">Your contrast color is kept when you switch to single tone.</p>
               <button id="revert-coat" type="button" class="secondary" disabled>Revert coat edits</button>
             </div>
           </div>
@@ -110,25 +115,55 @@ FORM: Approved compact utility sheet and original real-time 3D character; user-p
               <button id="palette-cloud" type="button" class="coat-preset secondary" aria-pressed="false" disabled>Storm cloud</button>
             </div>
           </fieldset>
+          <h2 class="behavior-heading">A little personality</h2>
+          <div class="setting-row">
+            <div><label for="pet-size">Pocket or pounce?</label><p id="size-note">Size on your desktop.</p></div>
+            <select id="pet-size" aria-describedby="size-note"><option value="0.5">Tiny · 50%</option><option value="0.6">Mini · 60%</option><option value="0.7">Pocket · 70%</option><option value="0.8">Little · 80%</option><option value="0.9">Cozy · 90%</option><option value="1">Just right · 100%</option><option value="1.3">Big paws · 130%</option><option value="1.5">Full pounce · 150%</option></select>
+          </div>
+          <div class="setting-row">
+            <div><label for="motion-level">Paw pace</label><p id="motion-note">Still pauses motion. Gentle strolls occasionally. Lively explores more.</p></div>
+            <select id="motion-level" aria-describedby="motion-note system-motion-note"><option value="still">Still</option><option value="gentle">Gentle</option><option value="lively">Lively</option></select>
+          </div>
+          <p id="system-motion-note" class="field-hint" hidden>Motion is paused by your system's reduced-motion preference.</p>
+          <div class="setting-row">
+            <div><label for="follow-window">A window seat</label><p id="window-follow-note">Stroll along the active window's top edge when there is room above it.</p><p id="window-follow-status" role="status"></p></div>
+            <input id="follow-window" type="checkbox" aria-describedby="window-follow-note window-follow-status">
+          </div>
+          <div class="setting-row">
+            <div><label for="stay-put">Stay, please</label><p id="stay-note">Keep this position. Animations stay on; you can still carry your pet.</p></div>
+            <input id="stay-put" type="checkbox" aria-describedby="stay-note">
+          </div>
+          <div class="setting-row">
+            <div><label for="comment-frequency">Talkativeness</label><p id="frequency-note">Care reactions work even with comments off.</p></div>
+            <select id="comment-frequency" aria-describedby="frequency-note"><option value="off">Comments off</option><option value="quiet">Quiet</option><option value="balanced">Balanced</option><option value="chatty">Chatty</option></select>
+          </div>
+          <div class="setting-row">
+            <div><label for="break-reminders">Stretch those paws</label><p id="break-note">A loving reminder after 45 minutes together. Paused at home.</p></div>
+            <input id="break-reminders" type="checkbox" aria-describedby="break-note">
+          </div>
         </section>
-        <div class="save-bar"><p id="save-status" role="status" aria-live="polite">Your preferences stay on this device.</p><button id="save-button" type="submit" disabled>Save preferences</button></div>
-      </form>
-      <section id="model-section" class="model-section" aria-labelledby="model-heading">
-        <div class="section-title"><h2 id="model-heading">Optional local model</h2><span id="model-phase" class="phase">Checking…</span></div>
-        <p>Scripted care, play and companionship are always available. Download only if you would like AI comments.</p>
+      <section id="model-section" class="model-section" aria-labelledby="model-heading" hidden>
+        <div class="section-title"><h2 id="model-heading">Optional local model</h2>
+        <details id="model-details" class="model-details">
+        <summary aria-label="Model details" title="Model details"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/></svg></summary>
+        <div class="model-details-panel">
         <dl class="model-facts">
           <div><dt>Model</dt><dd id="model-name">Checking model details…</dd></div>
-          <div><dt>Download</dt><dd id="model-size">—</dd></div>
           <div><dt>License</dt><dd><span id="model-license">—</span><span id="model-license-url" class="source-text"></span></dd></div>
           <div><dt>Source</dt><dd id="model-source" class="source-text">—</dd></div>
         </dl>
         <p id="model-resources" class="resource-note"></p>
+        </div></details><span id="model-phase" class="phase">Checking…</span></div>
+        <p>For extra conversation. Care and companionship work without it.</p>
+        <p id="model-size" class="field-hint">Checking download size…</p>
         <div id="model-progress-area" hidden><label id="progress-label" for="model-progress">Download progress</label><progress id="model-progress" max="100" value="0"></progress><p id="progress-text" class="field-hint" role="status"></p></div>
         <p id="model-error" class="notice error" role="alert" hidden></p>
-        <label id="consent-label" class="consent"><input id="download-consent" type="checkbox"><span>I agree to download this model after reviewing its size, license, source and resource requirements above.</span></label>
+        <label id="consent-label" class="consent"><input id="download-consent" type="checkbox"><span>I agree to download and store this optional model on this device.</span></label>
         <div class="model-actions"><button id="download-button" type="button" disabled>Download model</button><button id="cancel-download-button" type="button" class="secondary" hidden>Cancel download</button><button id="remove-model-button" type="button" class="secondary" hidden>Remove model</button><span id="model-action-status" role="status"></span></div>
       </section>
-      <footer>No accounts. No telemetry. Just a cat.<span>Nooki · desktop prototype</span></footer>
+        <div class="save-bar"><p id="save-status" role="status" aria-live="polite">Your preferences stay on this device.</p><button id="save-button" type="submit" disabled>Save preferences</button></div>
+      </form>
+      <footer>No accounts. No telemetry. Just company.<span>Nooki · desktop prototype</span></footer>
     </main>
   </body>
 </html>

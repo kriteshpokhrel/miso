@@ -1,7 +1,18 @@
-export type Mood = 'idle' | 'walking' | 'hungry' | 'playing' | 'purring' | 'sleeping' | 'home' | 'mimicking' | 'irritated';
+import { DEFAULT_SPECIES, type SpeciesId } from './species.js';
+
+export type Mood = 'idle' | 'walking' | 'hungry' | 'eating' | 'playing' | 'purring' | 'sleeping' | 'relaxing' | 'yawning' | 'home' | 'mimicking' | 'irritated';
 export type CareAction = 'feed' | 'pet' | 'play';
 export type CommentFrequency = 'off' | 'quiet' | 'balanced' | 'chatty';
 export type CoatPattern = 'single' | 'dual';
+export type MotionLevel = 'still' | 'gentle' | 'lively';
+export interface PetMotion {
+  state: 'idle' | 'walking' | 'hopping' | 'falling' | 'dragging' | 'home-arriving' | 'home-entering' | 'home-leaving';
+  direction: -1 | 1;
+  speed: number;
+  progress: number;
+  topInset?: number;
+}
+export const IDLE_MOTION: Readonly<PetMotion> = Object.freeze({ state: 'idle', direction: 1, speed: 0, progress: 0 });
 export interface CoatColors {
   coatPattern: CoatPattern;
   coatColor: string;
@@ -9,11 +20,12 @@ export interface CoatColors {
 }
 
 export interface PetState {
-  species: 'cat';
+  species: SpeciesId;
   hunger: number;
   energy: number;
   mood: Mood;
   atHome: boolean;
+  manualSleep: boolean;
   lastTickAt: number;
   lastInteractionAt: number;
   lastCommentAt: number;
@@ -25,11 +37,14 @@ export interface PetState {
 }
 
 export interface Settings extends CoatColors {
+  petSpecies: SpeciesId;
   launchAtLogin: boolean;
   commentFrequency: CommentFrequency;
   allowedApps: string[];
   aiEnabled: boolean;
-  reducedMotion: boolean;
+  motionLevel: MotionLevel;
+  followWindow: boolean;
+  stayPut: boolean;
   petSize: number;
   breakReminders: boolean;
 }
@@ -62,6 +77,9 @@ export interface Snapshot {
   packaged: boolean;
   moving: boolean;
   attention: Attention;
+  motion: PetMotion;
+  systemReducedMotion: boolean;
+  windowFollowing: string;
 }
 
 export interface Attention {
@@ -73,6 +91,8 @@ export interface Attention {
 export interface NookiApi {
   getSnapshot(): Promise<Snapshot>;
   care(action: CareAction): Promise<Snapshot>;
+  setSleeping(asleep: boolean): Promise<Snapshot>;
+  setCareMenuOpen(open: boolean): Promise<void>;
   goHome(): Promise<void>;
   restore(): Promise<void>;
   openSettings(): Promise<void>;
@@ -83,17 +103,20 @@ export interface NookiApi {
   startDrag(): Promise<void>;
   dragPet(): Promise<void>;
   endDrag(): Promise<void>;
-  openPetMenu(): Promise<void>;
   onSnapshot(listener: (snapshot: Snapshot) => void): () => void;
   onAttention(listener: (attention: Attention) => void): () => void;
+  onMotion(listener: (motion: PetMotion) => void): () => void;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
+  petSpecies: DEFAULT_SPECIES,
   launchAtLogin: true,
   commentFrequency: 'quiet',
   allowedApps: [],
   aiEnabled: false,
-  reducedMotion: false,
+  motionLevel: 'gentle',
+  followWindow: true,
+  stayPut: false,
   petSize: 1,
   breakReminders: true,
   coatPattern: 'dual',

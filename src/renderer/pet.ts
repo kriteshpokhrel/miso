@@ -1,4 +1,5 @@
 import { createPetScene } from './pet-scene.js';
+import type { PetMotion } from '../shared/contracts.js';
 
 if (new URLSearchParams(location.search).get('view') === 'settings') {
   const canvas = document.getElementById('coat-preview');
@@ -12,7 +13,7 @@ if (new URLSearchParams(location.search).get('view') === 'settings') {
   const update = (event: WindowEventMap['nooki:coat-preview']): void => {
     if (!event.detail.active && !scene) return;
     try {
-      if (!scene) scene = createPetScene(canvas, report, { preview: true });
+      if (!scene) scene = createPetScene(canvas, report);
       scene.setActive(event.detail.active);
       scene.update(event.detail.snapshot);
     } catch (reason) {
@@ -36,13 +37,22 @@ if (new URLSearchParams(location.search).get('view') === 'settings') {
   };
   try {
     const scene = createPetScene(canvas, report);
+    const menu = (event: WindowEventMap['nooki:care-menu']): void => { scene.setActive(!event.detail); };
+    window.addEventListener('nooki:care-menu', menu);
+    const move = (value: PetMotion): void => {
+      document.body.dataset.homeStage = String(value.state.startsWith('home-'));
+      document.body.dataset.compactPerch = String((value.topInset ?? 64) < 63.99);
+      document.body.style.setProperty('--pet-top', `${value.topInset ?? 64}px`);
+      scene.move(value);
+    };
     let updates = 0;
-    const unsubscribe = window.nooki.onSnapshot(snapshot => { updates++; scene.update(snapshot); });
+    const unsubscribe = window.nooki.onSnapshot(snapshot => { updates++; move(snapshot.motion); scene.update(snapshot); });
     const stopLooking = window.nooki.onAttention(value => scene.look(value));
+    const stopMoving = window.nooki.onMotion(move);
     void window.nooki.getSnapshot().then(snapshot => { if (!updates) scene.update(snapshot); }).catch(reason => {
       report(`Nooki could not load its 3D state: ${reason instanceof Error ? reason.message : String(reason)}`);
     });
-    window.addEventListener('beforeunload', () => { unsubscribe(); stopLooking(); scene.dispose(); }, { once: true });
+    window.addEventListener('beforeunload', () => { window.removeEventListener('nooki:care-menu', menu); unsubscribe(); stopLooking(); stopMoving(); scene.dispose(); }, { once: true });
   } catch (reason) {
     console.error('Nooki 3D renderer failed:', reason);
     report(`Nooki needs WebGL 2 graphics to appear. Check your graphics driver or hardware acceleration, then restart. ${reason instanceof Error ? reason.message : ''}`);

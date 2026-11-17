@@ -2,7 +2,7 @@ import { freemem } from 'node:os';
 import type { ModelStatus, PetState } from '../../shared/contracts.js';
 import { MODEL_INFO } from './catalog.js';
 import { downloadModel } from './downloader.js';
-import { buildCatPrompt, CAT_PERSONALITY, cleanComment } from './prompt.js';
+import { buildPetPrompt, petPersonality, cleanComment } from './prompt.js';
 import { deleteModelFile, ensureModelDirectory, modelPaths, verifyInstalledModel } from './storage.js';
 
 export { MODEL_INFO } from './catalog.js';
@@ -135,13 +135,13 @@ export class LocalAiService {
 
   generate(appName: string, pet: PetState): Promise<string | null> {
     // Main must first check aiEnabled and exact normalized membership of allowedApps.
-    const prompt = buildCatPrompt(appName, pet);
+    const prompt = buildPetPrompt(appName, pet);
     if (!prompt || this.maintenance || this.inferenceTask || !this.installed || this.status.phase !== 'ready') {
       return Promise.resolve(null);
     }
     const controller = new AbortController();
     this.inferenceController = controller;
-    const task = this.infer(prompt, controller).finally(() => {
+    const task = this.infer(prompt, petPersonality(pet.species), controller).finally(() => {
       if (this.inferenceController === controller) this.inferenceController = undefined;
       if (this.inferenceTask === task) this.inferenceTask = undefined;
     });
@@ -149,7 +149,7 @@ export class LocalAiService {
     return task;
   }
 
-  private async infer(prompt: string, controller: AbortController): Promise<string | null> {
+  private async infer(prompt: string, personality: string, controller: AbortController): Promise<string | null> {
     const signal = controller.signal;
     const timeout = setTimeout(() => controller.abort(new Error('Local inference timed out. Scripted comments remain available.')), 12_000);
     timeout.unref();
@@ -182,7 +182,7 @@ export class LocalAiService {
       signal.throwIfAborted();
       const session = new LlamaChatSession({
         contextSequence: context.getSequence(),
-        systemPrompt: CAT_PERSONALITY,
+        systemPrompt: personality,
         autoDisposeSequence: true,
       });
       resources.unshift(session);

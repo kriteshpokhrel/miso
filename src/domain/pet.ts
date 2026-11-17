@@ -1,4 +1,5 @@
 import type { CareAction, CommentFrequency, PetState } from '../shared/contracts.js';
+import { DEFAULT_SPECIES, getSpecies, type SpeciesDefinition, type SpeciesId } from '../shared/species.js';
 
 const MIN_NEED = 0;
 const MAX_NEED = 100;
@@ -9,47 +10,11 @@ const MAX_TICK_SECONDS = 24 * 60 * 60;
 const DISTURBANCE_HALF_LIFE_MS = 25_000;
 const BREAK_REMINDER_INTERVAL_MS = 45 * 60 * 1_000;
 
-export const SPECIES_CONFIG = {
-  cat: {
-    initialHunger: 18,
-    initialEnergy: 82,
-    hungerPerSecond: 0.005,
-    energyDrainPerSecond: 0.004,
-    sleepRecoveryPerSecond: 0.015,
-  },
-} as const;
-
 const COMMENT_COOLDOWNS: Record<CommentFrequency, number> = {
   off: Number.POSITIVE_INFINITY,
   quiet: 120_000,
   balanced: 60_000,
   chatty: 30_000,
-};
-
-const HUNGER_COMMENTS = [
-  'A little snack would make my whiskers very happy.',
-  'I can smell treats somewhere around here.',
-];
-
-const ENERGY_COMMENTS = [
-  'I think these paws are ready for a cozy rest.',
-  'Could I borrow a sunny spot for a little nap?',
-];
-
-const GENERAL_COMMENTS = [
-  'Could we have a tiny play break?',
-  'You are my favorite human to supervise.',
-];
-
-const IRRITATED_COMMENTS = [
-  'I could close that app... kidding. I only have paws.',
-  'I could move that window... kidding. Paws, not power.',
-];
-
-const REACTION_DURATIONS: Record<CareAction, number> = {
-  feed: 8_000,
-  pet: 12_000,
-  play: 18_000,
 };
 
 function clampNeed(value: number): number {
@@ -65,6 +30,7 @@ function advanceEnergy(
   initialEnergy: number,
   elapsedSeconds: number,
   wasSleeping: boolean,
+  needs: SpeciesDefinition['needs'],
 ): { energy: number; sleeping: boolean } {
   let energy = clampNeed(initialEnergy);
   let remaining = elapsedSeconds;
@@ -78,9 +44,9 @@ function advanceEnergy(
       }
 
       const secondsUntilWake =
-        (WAKE_THRESHOLD - energy) / SPECIES_CONFIG.cat.sleepRecoveryPerSecond;
+        (WAKE_THRESHOLD - energy) / needs.sleepRecoveryPerSecond;
       if (remaining < secondsUntilWake) {
-        energy += remaining * SPECIES_CONFIG.cat.sleepRecoveryPerSecond;
+        energy += remaining * needs.sleepRecoveryPerSecond;
         remaining = 0;
       } else {
         energy = WAKE_THRESHOLD;
@@ -94,9 +60,9 @@ function advanceEnergy(
       }
 
       const secondsUntilSleep =
-        (energy - SLEEP_THRESHOLD) / SPECIES_CONFIG.cat.energyDrainPerSecond;
+        (energy - SLEEP_THRESHOLD) / needs.energyDrainPerSecond;
       if (remaining < secondsUntilSleep) {
-        energy -= remaining * SPECIES_CONFIG.cat.energyDrainPerSecond;
+        energy -= remaining * needs.energyDrainPerSecond;
         remaining = 0;
       } else {
         energy = SLEEP_THRESHOLD;
@@ -109,14 +75,16 @@ function advanceEnergy(
   return { energy: clampNeed(energy), sleeping };
 }
 
-export function createPet(now: number): PetState {
+export function createPet(now: number, species: SpeciesId = DEFAULT_SPECIES): PetState {
   const timestamp = Number.isFinite(now) ? now : 0;
+  const definition = getSpecies(species);
   return {
-    species: 'cat',
-    hunger: SPECIES_CONFIG.cat.initialHunger,
-    energy: SPECIES_CONFIG.cat.initialEnergy,
+    species,
+    hunger: definition.needs.initialHunger,
+    energy: definition.needs.initialEnergy,
     mood: 'idle',
     atHome: false,
+    manualSleep: false,
     lastTickAt: timestamp,
     lastInteractionAt: timestamp,
     lastCommentAt: 0,
@@ -128,7 +96,7 @@ export function createPet(now: number): PetState {
   };
 }
 
-export function tick(pet: PetState, now: number): PetState {
+export function tick(pet: PetState, now: number, definition = getSpecies(pet.species)): PetState {
   if (!Number.isFinite(now) || !Number.isFinite(pet.lastTickAt) || now < pet.lastTickAt) {
     return pet;
   }
@@ -137,10 +105,12 @@ export function tick(pet: PetState, now: number): PetState {
   const elapsedMs = elapsedSeconds * 1_000;
   const hunger = pet.atHome
     ? clampNeed(pet.hunger)
-    : clampNeed(pet.hunger + elapsedSeconds * SPECIES_CONFIG.cat.hungerPerSecond);
+    : clampNeed(pet.hunger + elapsedSeconds * definition.needs.hungerPerSecond);
   const energyResult = pet.atHome
     ? { energy: clampNeed(pet.energy), sleeping: pet.mood === 'sleeping' || pet.energy <= SLEEP_THRESHOLD }
-    : advanceEnergy(pet.energy, elapsedSeconds, pet.mood === 'sleeping');
+    : pet.manualSleep
+      ? { energy: clampNeed(pet.energy + elapsedSeconds * definition.needs.sleepRecoveryPerSecond), sleeping: true }
+      : advanceEnergy(pet.energy, elapsedSeconds, pet.mood === 'sleeping', definition.needs);
   const reactionIsActive = pet.reactionUntil > now && !energyResult.sleeping;
   const disturbance = clampNeed(
     (Number.isFinite(pet.disturbance) ? pet.disturbance : 0) *
@@ -167,33 +137,27 @@ export function tick(pet: PetState, now: number): PetState {
   };
 }
 
-export function care(pet: PetState, action: CareAction, now: number): PetState {
-  if (!Number.isFinite(now) || !(action in REACTION_DURATIONS)) return pet;
+export function care(pet: PetState, action: CareAction, now: number, definition = getSpecies(pet.species)): PetState {
+  if (!Number.isFinite(now) || !Object.hasOwn(definition.care, action)) return pet;
 
-  const advanced = tick(pet, now);
+  const advanced = tick(pet, now, definition);
   const interactionAt = Math.max(now, advanced.lastTickAt);
   let hunger = advanced.hunger;
   let energy = advanced.energy;
 
-  if (action === 'feed') {
-    hunger -= 35;
-    energy += 3;
-  } else if (action === 'pet') {
-    energy += 2;
-  } else {
-    hunger += 8;
-    energy -= 12;
-  }
+  const effect = definition.care[action];
+  hunger += effect.hunger;
+  energy += effect.energy;
 
   hunger = clampNeed(hunger);
   energy = clampNeed(energy);
   const disturbance = clampNeed(
-    advanced.disturbance - (action === 'pet' ? 40 : action === 'feed' ? 8 : 0),
+    advanced.disturbance - effect.calm,
   );
-  const reaction = action === 'play' ? 'playing' : 'purring';
+  const reaction = effect.mood;
   const canReact = !advanced.atHome && advanced.mood !== 'sleeping' && energy > SLEEP_THRESHOLD;
 
-  return {
+  const result: PetState = {
     ...advanced,
     hunger,
     energy,
@@ -207,8 +171,9 @@ export function care(pet: PetState, action: CareAction, now: number): PetState {
         : baselineMood(hunger, energy),
     lastTickAt: interactionAt,
     lastInteractionAt: interactionAt,
-    reactionUntil: canReact ? interactionAt + REACTION_DURATIONS[action] : 0,
+    reactionUntil: canReact ? interactionAt + effect.duration : 0,
   };
+  return canReact && definition.reactToCare ? { ...result, ...definition.reactToCare(result, action, interactionAt) } : result;
 }
 
 export function disturb(pet: PetState, distancePixels: number, now: number): PetState {
@@ -222,8 +187,12 @@ export function disturb(pet: PetState, distancePixels: number, now: number): Pet
     return pet;
   }
 
+  return addDisturbance(pet, 6 + Math.min(60, distancePixels / 25), now);
+}
+
+export function addDisturbance(pet: PetState, contribution: number, now: number): PetState {
+  if (pet.atHome || !Number.isFinite(now) || now < pet.lastTickAt || !Number.isFinite(contribution) || contribution <= 0) return pet;
   const advanced = tick(pet, now);
-  const contribution = 6 + Math.min(60, distancePixels / 25);
   const disturbance = clampNeed(advanced.disturbance + contribution);
   const irritated = disturbance >= 60;
 
@@ -247,10 +216,25 @@ export function setHome(pet: PetState, atHome: boolean, now: number): PetState {
   return {
     ...advanced,
     atHome,
-    mood: atHome ? 'home' : baselineMood(advanced.hunger, advanced.energy),
+    mood: atHome ? 'home' : advanced.manualSleep ? 'sleeping' : baselineMood(advanced.hunger, advanced.energy),
     lastTickAt: Math.max(now, advanced.lastTickAt),
     reactionUntil: atHome ? 0 : advanced.reactionUntil,
   };
+}
+
+export function setSleeping(pet: PetState, asleep: boolean, now: number): PetState {
+  if (!Number.isFinite(now) || now < pet.lastTickAt) return pet;
+  const advanced = tick(pet, now);
+  if (advanced.atHome) return advanced;
+  const energy = asleep ? advanced.energy : Math.max(SLEEP_THRESHOLD + 1, advanced.energy);
+  return { ...advanced, manualSleep: asleep, energy, mood: asleep ? 'sleeping' : baselineMood(advanced.hunger, energy),
+    reactionUntil: 0, lastInteractionAt: Math.max(now, advanced.lastTickAt) };
+}
+
+export function idleActivity(pet: PetState, now: number, moving: boolean, random: number): PetState | null {
+  if (pet.atHome || moving || pet.reactionUntil > now || pet.hunger >= HUNGER_COMMENT_THRESHOLD
+    || pet.energy <= 20 || (pet.mood !== 'idle' && pet.mood !== 'walking')) return null;
+  return { ...pet, mood: random < 0.4 ? 'yawning' : 'relaxing', reactionUntil: now + (random < 0.4 ? 4500 : 12_000) };
 }
 
 export function shouldFollowCursor(pet: PetState): boolean {
@@ -269,6 +253,7 @@ export function scriptedComment(
 ): string | null {
   if (
     pet.atHome ||
+    pet.mood === 'sleeping' ||
     !(frequency in COMMENT_COOLDOWNS) ||
     frequency === 'off' ||
     !Number.isFinite(now) ||
@@ -278,14 +263,15 @@ export function scriptedComment(
     return null;
   }
 
+  const lines = getSpecies(pet.species).comments;
   const comments =
     pet.mood === 'irritated' && pet.reactionUntil > now
-      ? IRRITATED_COMMENTS
+      ? lines.irritated
       : pet.hunger >= HUNGER_COMMENT_THRESHOLD
-        ? HUNGER_COMMENTS
+        ? lines.hungry
         : pet.energy <= 35
-          ? ENERGY_COMMENTS
-          : GENERAL_COMMENTS;
+          ? lines.tired
+          : lines.general;
   const cooldown = commentCooldown(frequency);
   const index =
     random === undefined
@@ -308,6 +294,7 @@ export function breakReminder(
   if (
     !enabled ||
     pet.atHome ||
+    pet.mood === 'sleeping' ||
     frequency === 'off' ||
     !(frequency in COMMENT_COOLDOWNS) ||
     !Number.isFinite(now) ||
@@ -320,5 +307,5 @@ export function breakReminder(
     return null;
   }
 
-  return 'You have been working hard—how about a little stretch or a sip of water?';
+  return 'A little stretch and a sip of water, lovely?';
 }

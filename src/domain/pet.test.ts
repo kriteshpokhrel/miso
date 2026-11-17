@@ -6,12 +6,41 @@ import {
   care,
   commentCooldown,
   createPet,
+  idleActivity,
   disturb,
   scriptedComment,
   setHome,
+  setSleeping,
   shouldFollowCursor,
   tick,
 } from './pet.js';
+
+test('a chosen nap stays asleep after recovery, is quiet, and wakes on request', () => {
+  const asleep = setSleeping(createPet(0), true, 0);
+  const rested = tick(asleep, 3_600_000);
+  assert.equal(rested.mood, 'sleeping');
+  assert.equal(rested.energy, 100);
+  assert.equal(scriptedComment(rested, 'chatty', 3_600_000), null);
+  assert.equal(breakReminder({ ...rested, activeTimeMs: 3_600_000 }, true, 'chatty', 3_600_000), null);
+  const awake = setSleeping({ ...rested, energy: 5 }, false, 3_600_000);
+  assert.equal(awake.manualSleep, false);
+  assert.notEqual(tick(awake, 3_601_000).mood, 'sleeping');
+  const home = setHome(asleep, true, 0);
+  assert.equal(tick(home, 60_000).energy, home.energy);
+  assert.equal(setHome(tick(home, 60_000), false, 60_000).mood, 'sleeping');
+});
+
+test('idle poses never interrupt care, travel, sleep or home', () => {
+  const pet = createPet(0);
+  const yawn = idleActivity(pet, 1000, false, 0.1)!;
+  assert.equal(yawn.mood, 'yawning');
+  assert.equal(tick(yawn, yawn.reactionUntil).mood, 'idle');
+  assert.equal(idleActivity(pet, 1000, false, 0.8)!.mood, 'relaxing');
+  assert.equal(idleActivity(pet, 1000, true, 0.1), null);
+  assert.equal(idleActivity(care(pet, 'feed', 1000), 1000, false, 0.1), null);
+  assert.equal(idleActivity(setSleeping(pet, true, 1000), 1000, false, 0.1), null);
+  assert.equal(idleActivity(setHome(pet, true, 1000), 1000, false, 0.1), null);
+});
 
 test('createPet starts with bounded needs and the supplied clock', () => {
   const pet = createPet(1_234);
@@ -89,7 +118,7 @@ test('home pauses needs and restoration does not catch up elapsed home time', ()
 test('care changes needs and starts bounded reactions that expire', () => {
   const fed = care(createPet(0), 'feed', 0);
   assert.equal(fed.hunger, 0);
-  assert.equal(fed.mood, 'purring');
+  assert.equal(fed.mood, 'eating');
   assert.equal(fed.reactionUntil, 8_000);
 
   const expired = tick(fed, 8_000);
@@ -162,7 +191,7 @@ test('repeated dragging triggers a temporary irritated reaction with playful com
   assert.equal(pet.disturbance, 60);
   assert.equal(pet.mood, 'irritated');
   assert.equal(pet.reactionUntil, 72_000);
-  assert.match(scriptedComment(pet, 'balanced', 60_000) ?? '', /kidding/i);
+  assert.match(scriptedComment(pet, 'balanced', 60_000) ?? '', /gentler|scritching/i);
 
   const active = tick(pet, 71_999);
   assert.equal(active.mood, 'irritated');

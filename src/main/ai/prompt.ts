@@ -1,7 +1,12 @@
 import type { Mood, PetState } from '../../shared/contracts.js';
+import { getSpecies, isSpeciesId, type SpeciesId } from '../../shared/species.js';
+import { MAX_SPEECH_LENGTH } from '../../shared/speech.js';
 
-const MOODS: readonly Mood[] = ['idle', 'walking', 'hungry', 'playing', 'purring', 'sleeping', 'home', 'mimicking', 'irritated'];
-export const CAT_PERSONALITY = 'You are Nooki, an affectionate, playful, mischievous pet cat. Write one gentle, short English sentence, at most 120 characters, about the app name or your own needs. Never give advice or claim to read files, titles, messages or documents. Return only the sentence, without formatting.';
+const MOODS: readonly Mood[] = ['idle', 'walking', 'hungry', 'eating', 'playing', 'purring', 'sleeping', 'relaxing', 'yawning', 'home', 'mimicking', 'irritated'];
+export function petPersonality(species: SpeciesId): string {
+  const definition = getSpecies(species);
+  return `You are Nooki, a pet ${definition.label.toLowerCase()}. Your personality is ${definition.personality}. Write one gentle English sentence, at most ${MAX_SPEECH_LENGTH} characters, about the app name or your own needs. Never give advice or claim to read files, titles, messages or documents. Return only the sentence, without formatting.`;
+}
 
 export function normalizeAppName(appName: unknown): string | null {
   if (typeof appName !== 'string') return null;
@@ -10,15 +15,15 @@ export function normalizeAppName(appName: unknown): string | null {
   return normalized;
 }
 
-export function buildCatPrompt(appName: string, pet: PetState): string | null {
+export function buildPetPrompt(appName: string, pet: PetState): string | null {
   const app = normalizeAppName(appName);
-  if (!app || !pet || pet.species !== 'cat' || pet.atHome !== false ||
+  if (!app || !pet || !isSpeciesId(pet.species) || pet.atHome !== false ||
       !MOODS.includes(pet.mood) || pet.mood === 'home' ||
       !Number.isFinite(pet.hunger) || !Number.isFinite(pet.energy)) return null;
   // Deliberately project individual scalar fields. Never serialize the caller's object.
   return JSON.stringify({
     app,
-    species: 'cat',
+    species: pet.species,
     mood: pet.mood,
     hunger: Math.round(Math.max(0, Math.min(100, pet.hunger))),
     energy: Math.round(Math.max(0, Math.min(100, pet.energy))),
@@ -62,7 +67,7 @@ export function cleanComment(value: string): string | null {
   if (new Set(lines).size !== lines.length) return null;
   let text = plain.replace(/\s+/g, ' ').trim();
   // Reject rather than truncate: a cut-off quote/phrase is not a successful comment.
-  if (!text || text.length > 160 || !/\p{L}/u.test(text) ||
+  if (!text || text.length > MAX_SPEECH_LENGTH || !/\p{L}/u.test(text) ||
       /([\p{L}\p{N}!?.,])\1{7,}/iu.test(text) ||
       (text.match(/"/g)?.length ?? 0) % 2 !== 0 ||
       (text.match(/“/g)?.length ?? 0) !== (text.match(/”/g)?.length ?? 0) ||

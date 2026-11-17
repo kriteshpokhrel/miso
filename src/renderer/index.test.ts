@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import { buildSync } from 'esbuild';
 import type { NookiApi, Settings, Snapshot } from '../shared/contracts.js';
-import { DEFAULT_SETTINGS } from '../shared/contracts.js';
+import { DEFAULT_SETTINGS, IDLE_MOTION } from '../shared/contracts.js';
 
 interface ControlEvent {
   preventDefault(): void;
@@ -21,6 +21,7 @@ interface ControlEvent {
 }
 
 class Control {
+  static active: Control | undefined;
   value = '';
   textContent = '';
   checked = false;
@@ -42,9 +43,11 @@ class Control {
     for (const listener of this.listeners.get(name) || []) listener(event);
   }
   querySelectorAll(): Control[] { return this.children; }
+  replaceChildren(...children: Control[]): void { this.children = children; }
   setAttribute(name: string, value: string): void { this.attributes[name] = value; }
   removeAttribute(name: string): void { delete this.attributes[name]; }
-  focus(): void { this.focused = true; }
+  focus(): void { this.focused = true; Control.active = this; }
+  blur(): void { this.focused = false; if (Control.active === this) Control.active = undefined; }
   setPointerCapture(id: number): void { this.captured.add(id); }
   hasPointerCapture(id: number): boolean { return this.captured.has(id); }
   releasePointerCapture(id: number): void { this.captured.delete(id); }
@@ -58,12 +61,12 @@ const markup = readFileSync(new URL('./index.html', import.meta.url), 'utf8');
 
 function state(): Snapshot {
   return {
-    pet: { species: 'cat', hunger: 20, energy: 80, mood: 'idle', atHome: false, lastTickAt: 0, lastInteractionAt: 0, lastCommentAt: 0, reactionUntil: 0, disturbance: 0, lastDisturbedAt: 0, activeTimeMs: 0, lastBreakReminderAt: 0 },
+    pet: { species: 'cat', hunger: 20, energy: 80, mood: 'idle', atHome: false, manualSleep: false, lastTickAt: 0, lastInteractionAt: 0, lastCommentAt: 0, reactionUntil: 0, disturbance: 0, lastDisturbedAt: 0, activeTimeMs: 0, lastBreakReminderAt: 0 },
     settings: { ...DEFAULT_SETTINGS, allowedApps: [] },
     model: { phase: 'not-installed', downloadedBytes: 0, totalBytes: 100 },
     modelInfo: { id: 'test', name: 'Test local model', sizeBytes: 100, license: 'Test license', licenseUrl: 'https://example.invalid/license', sourceUrl: 'https://example.invalid/model', resourceNote: 'Test resource disclosure' },
     comment: null, error: null, platform: 'win32', packaged: false, moving: false,
-    attention: { x: 0, y: 0, nearby: false },
+    attention: { x: 0, y: 0, nearby: false }, motion: { ...IDLE_MOTION }, systemReducedMotion: false, windowFollowing: 'Desktop',
   };
 }
 
@@ -77,7 +80,7 @@ function mount(overrides: Partial<NookiApi> = {}, settingsView = true) {
     assert.ok(control, id);
     return control;
   };
-  get('settings-form').children = ['launch-at-login', 'comment-frequency', 'reduced-motion', 'ai-enabled', 'allowed-apps', 'pet-size', 'break-reminders', 'coat-pattern', 'coat-color', 'accent-color'].map(get);
+  get('settings-form').children = ['pet-species', 'launch-at-login', 'comment-frequency', 'motion-level', 'follow-window', 'ai-enabled', 'allowed-apps', 'pet-size', 'break-reminders', 'coat-pattern', 'coat-color', 'accent-color'].map(get);
   let nextSnapshot = state();
   let now = 0;
   let listener: (snapshot: Snapshot) => void = () => {};
@@ -86,6 +89,8 @@ function mount(overrides: Partial<NookiApi> = {}, settingsView = true) {
   const api: NookiApi = {
     getSnapshot: async () => nextSnapshot,
     care: async () => nextSnapshot,
+    setSleeping: async () => nextSnapshot,
+    setCareMenuOpen: async () => {},
     goHome: async () => {},
     restore: async () => {},
     openSettings: async () => {},
@@ -96,17 +101,18 @@ function mount(overrides: Partial<NookiApi> = {}, settingsView = true) {
     startDrag: async () => {},
     dragPet: async () => {},
     endDrag: async () => {},
-    openPetMenu: async () => {},
     onSnapshot: handler => { listener = handler; return () => {}; },
     onAttention: () => () => {},
+    onMotion: () => () => {},
     ...overrides,
   };
   runInNewContext(source, {
     URLSearchParams, location: { search: settingsView ? '?view=settings' : '' }, performance: { now: () => now },
-    CustomEvent,
+    CustomEvent, Option: class extends Control { constructor(label: string, value: string) { super(); this.textContent = label; this.value = value; } },
     window: { nooki: api, addEventListener() {}, dispatchEvent(event: CustomEvent) { previews.push(event.detail); } },
     document: {
       body: new Control(), getElementById: (id: string) => controls.get(id),
+      get activeElement() { return Control.active; },
       querySelectorAll: () => [...controls.values()],
     },
   });
@@ -283,7 +289,7 @@ test('a stationary tap pets and failed care calls report errors without locking 
   assert.equal(ui.get('cat').hasPointerCapture(1), false);
 });
 
-test('speech only displays supplied comments, with a going-home exception', async () => {
+test('speech only displays supplied comments, including a quiet going-home sequence', async () => {
   const ui = mount({}, false);
   await settle();
   assert.equal(ui.get('speech').hidden, true);
@@ -303,8 +309,7 @@ test('speech only displays supplied comments, with a going-home exception', asyn
   assert.equal(ui.get('speech').textContent, '');
   assert.equal(ui.get('cat').dataset.speaking, 'false');
   ui.emit({ ...quiet, pet: { ...quiet.pet, mood: 'home', atHome: true } });
-  assert.equal(ui.get('speech').hidden, false);
-  assert.match(ui.get('speech').textContent, /Heading home/);
+  assert.equal(ui.get('speech').hidden, true);
 });
 
 test('model disclosure includes approximate size and exact bytes', async () => {
@@ -339,31 +344,117 @@ test('pet size and break reminder drafts survive snapshots and save as complete 
   ui.get('break-reminders').checked = false;
   ui.get('break-reminders').dispatch('change');
   const incoming = state();
-  incoming.settings.reducedMotion = true;
+  incoming.settings.motionLevel = 'still';
   ui.emit(incoming);
   assert.equal(ui.get('pet-size').value, '1.3');
   assert.equal(ui.get('break-reminders').checked, false);
-  assert.equal(ui.get('reduced-motion').checked, true);
+  assert.equal(ui.get('motion-level').value, 'still');
   ui.get('settings-form').dispatch('submit');
   await settle();
   assert.equal(ui.calls[0]!.petSize, 1.3);
   assert.equal(ui.calls[0]!.breakReminders, false);
-  assert.equal(ui.calls[0]!.reducedMotion, true);
+  assert.equal(ui.calls[0]!.motionLevel, 'still');
 });
 
-test('context menu and keyboard shortcuts open native care options', async () => {
-  let opened = 0;
-  const ui = mount({ openPetMenu: async () => { opened++; } }, false);
+test('right-click and keyboard open radial care icons; Escape closes and restores keyboard focus', async () => {
+  const actions: string[] = [];
+  const ui = mount({ care: async action => { actions.push(action); return state(); } }, false);
   await settle();
   ui.get('cat').dispatch('contextmenu');
-  for (const key of ['Enter', 'ContextMenu', ' ']) ui.get('cat').dispatch('keydown', { key });
-  ui.get('cat').dispatch('keydown', { key: 'F10', shiftKey: true });
-  ui.get('cat').dispatch('keydown', { key: 'F10' });
-  ui.get('cat').dispatch('keydown', { key: 'Enter', repeat: true });
-  ui.get('cat').dispatch('click', { detail: 0 });
-  ui.get('cat').dispatch('click', { detail: 1 });
   await settle();
-  assert.equal(opened, 6);
+  assert.equal(ui.get('pet-menu').hidden, false);
+  ui.get('care-feed').dispatch('click');
+  await settle();
+  assert.deepEqual(actions, ['feed']);
+  assert.equal(ui.get('pet-menu').hidden, true);
+  ui.get('cat').dispatch('keydown', { key: 'Enter' });
+  await settle();
+  assert.equal(ui.get('care-feed').focused, true);
+  ui.get('pet-menu').dispatch('keydown', { key: 'ArrowRight' });
+  assert.equal(ui.get('care-play').focused, true);
+  ui.get('pet-menu').dispatch('keydown', { key: 'Escape' });
+  assert.equal(ui.get('pet-menu').hidden, true);
+  assert.equal(ui.get('cat').focused, true);
+});
+
+test('app presets remain opt-in and merge with custom names without widening saved aliases', async () => {
+  const ui = mount();
+  await settle();
+  assert.equal(ui.get('app-chrome').checked, false);
+  ui.get('app-chrome').checked = true;
+  ui.get('app-chrome').dispatch('change');
+  ui.get('allowed-apps').value = 'devenv.exe';
+  ui.get('allowed-apps').dispatch('input');
+  ui.get('settings-form').dispatch('submit');
+  await settle();
+  assert.deepEqual(Array.from(ui.calls[0]!.allowedApps), ['chrome.exe', 'devenv.exe']);
+  const saved = state();
+  saved.settings.allowedApps = ['OUTLOOK.EXE'];
+  ui.emit(saved);
+  ui.get('pet-size').value = '1.3';
+  ui.get('pet-size').dispatch('change');
+  ui.get('settings-form').dispatch('submit');
+  await settle();
+  assert.deepEqual(Array.from(ui.calls[1]!.allowedApps), ['OUTLOOK.EXE']);
+});
+
+test('the sleep control requests a nap, and a tap wakes rather than pets', async () => {
+  const requests: boolean[] = [];
+  const asleep = state();
+  asleep.pet.mood = 'sleeping';
+  asleep.pet.manualSleep = true;
+  const ui = mount({ setSleeping: async value => { requests.push(value); return value ? asleep : state(); },
+    care: async () => { throw new Error('A sleeping pet must wake on a tap.'); } }, false);
+  await settle();
+  ui.get('care-sleep').dispatch('click');
+  await settle();
+  assert.equal(ui.get('sleep-action-label').textContent, 'Wake');
+  ui.get('cat').dispatch('pointerdown');
+  ui.get('cat').dispatch('pointerup');
+  await settle();
+  assert.deepEqual(requests, [true, false]);
+});
+
+test('closing a pending care menu cannot reopen it or leave native motion paused', async () => {
+  const requests: boolean[] = [];
+  let release!: () => void;
+  const ui = mount({ setCareMenuOpen: async open => {
+    requests.push(open);
+    if (open) await new Promise<void>(resolve => { release = resolve; });
+  } }, false);
+  await settle();
+  ui.get('cat').dispatch('contextmenu');
+  await settle();
+  assert.equal(ui.get('pet-menu').hidden, true);
+  ui.get('pet-menu').dispatch('keydown', { key: 'Escape' });
+  release();
+  await settle();
+  assert.deepEqual(requests, [true, false]);
+  assert.equal(ui.get('pet-menu').hidden, true);
+});
+test('motion-level and following drafts survive navigation and snapshots; preview never inherits travel', async () => {
+  const ui = mount();
+  await settle();
+  ui.get('motion-level').value = 'lively';
+  ui.get('motion-level').dispatch('change');
+  ui.get('follow-window').checked = false;
+  ui.get('follow-window').dispatch('change');
+  ui.get('company-page').dispatch('click');
+  assert.equal(ui.get('model-section').hidden, false);
+  assert.equal(ui.get('coat-panel').hidden, true);
+  const walking = state();
+  walking.motion = { state: 'walking', speed: 80, direction: -1, progress: 0 };
+  walking.systemReducedMotion = true;
+  ui.emit(walking);
+  ui.get('coat-page').dispatch('click');
+  assert.equal(ui.get('model-section').hidden, true);
+  assert.equal(ui.get('system-motion-note').hidden, false);
+  assert.equal(ui.get('motion-level').value, 'lively');
+  assert.equal(ui.previews.at(-1)?.snapshot.motion.state, 'idle');
+  ui.get('settings-form').dispatch('submit');
+  await settle();
+  assert.equal(ui.calls[0]?.motionLevel, 'lively');
+  assert.equal(ui.calls[0]?.followWindow, false);
 });
 
 test('dragging captures the pointer, throttles movement, passes no coordinates and never pets', async () => {
@@ -377,6 +468,7 @@ test('dragging captures the pointer, throttles movement, passes no coordinates a
   await settle();
   const cat = ui.get('cat');
   cat.dispatch('pointerdown');
+  assert.equal(cat.focused, false);
   assert.equal(cat.hasPointerCapture(1), true);
   cat.dispatch('pointermove', { screenX: 106 });
   await settle();

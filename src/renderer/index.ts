@@ -1,10 +1,14 @@
-import type { CoatColors, CoatPattern, CommentFrequency, NookiApi, Settings, Snapshot } from '../shared/contracts.js';
+import type { CareAction, CoatColors, CoatPattern, CommentFrequency, MotionLevel, NookiApi, Settings, Snapshot } from '../shared/contracts.js';
+import { IDLE_MOTION } from '../shared/contracts.js';
+import { getSpecies, isSpeciesId, PET_SPECIES } from '../shared/species.js';
 import { COAT_PALETTES } from './coats.js';
+import { COMMON_APPS } from '../shared/apps.js';
 
 declare global {
   interface Window { nooki: NookiApi; }
   interface WindowEventMap {
     'nooki:coat-preview': CustomEvent<{ snapshot: Snapshot; active: boolean }>;
+    'nooki:care-menu': CustomEvent<boolean>;
   }
 }
 
@@ -30,9 +34,12 @@ const cancelButton = element<HTMLButtonElement>('cancel-download-button');
 const removeButton = element<HTMLButtonElement>('remove-model-button');
 const cat = element('cat');
 const inputs = {
+  petSpecies: element<HTMLSelectElement>('pet-species'),
   launchAtLogin: element<HTMLInputElement>('launch-at-login'),
   commentFrequency: element<HTMLSelectElement>('comment-frequency'),
-  reducedMotion: element<HTMLInputElement>('reduced-motion'),
+  motionLevel: element<HTMLSelectElement>('motion-level'),
+  followWindow: element<HTMLInputElement>('follow-window'),
+  stayPut: element<HTMLInputElement>('stay-put'),
   aiEnabled: element<HTMLInputElement>('ai-enabled'),
   allowedApps: appsInput,
   petSize: element<HTMLSelectElement>('pet-size'),
@@ -44,6 +51,7 @@ const inputs = {
 type SettingKey = keyof Settings;
 let snapshot: Snapshot | undefined;
 let draft: Settings | undefined;
+let selectedAppNames: string[] = [];
 let revision = 0;
 const dirty = new Map<SettingKey, number>();
 let saving = false;
@@ -52,11 +60,13 @@ let modelOperationVersion = 0;
 let careBusy = false;
 let snapshotEvents = 0;
 let localError = '';
-let coatPage = false;
+let coatPage = true;
 const coatKeys: Array<keyof CoatColors> = ['coatPattern', 'coatColor', 'accentColor'];
+inputs.petSpecies.replaceChildren(...Object.entries(PET_SPECIES).map(([id, definition]) => new Option(definition.label, id)));
 
 function renderCoat(): void {
   if (!draft || !snapshot || !isSettings) return;
+  showText('species-personality', getSpecies(draft.petSpecies).personality);
   inputs.accentColor.disabled = draft.coatPattern === 'single';
   showText('coat-color-value', draft.coatColor.toUpperCase());
   showText('accent-color-value', draft.accentColor.toUpperCase());
@@ -70,8 +80,8 @@ function renderCoat(): void {
     detail: {
       active: coatPage,
       snapshot: {
-        ...snapshot, settings: { ...draft }, pet: { ...snapshot.pet, mood: 'idle', atHome: false },
-        comment: null, moving: false, attention: { x: 0, y: 0, nearby: false },
+        ...snapshot, settings: { ...draft }, pet: { ...snapshot.pet, species: draft.petSpecies, mood: 'idle', atHome: false },
+        comment: null, moving: false, motion: { ...IDLE_MOTION }, attention: { x: 0, y: 0, nearby: false },
       },
     },
   }));
@@ -102,7 +112,7 @@ function bytes(value: number): string {
 }
 
 function validateApps(): string[] | null {
-  const names = appsInput.value.split(/[\n,]/).map(name => name.trim()).filter(Boolean);
+  const names = [...selectedAppNames, ...appsInput.value.split(/[\n,]/).map(name => name.trim()).filter(Boolean)];
   const invalid = names.find(name => !/^[a-zA-Z0-9][a-zA-Z0-9 ._()+-]{0,79}$/.test(name));
   const error = names.length > 30
     ? 'Use 30 process names or fewer.'
@@ -110,7 +120,29 @@ function validateApps(): string[] | null {
   showText('apps-error', error);
   element('apps-error').hidden = !error;
   appsInput.setAttribute('aria-invalid', String(Boolean(error)));
-  return error ? null : [...new Set(names)];
+  if (error) element<HTMLDetailsElement>('custom-apps').open = true;
+  return error ? null : names.filter((name, index) => names.findIndex(other => other.toLowerCase() === name.toLowerCase()) === index);
+}
+
+function presetNames(app: typeof COMMON_APPS[number]): string[] {
+  return snapshot?.platform === 'darwin' ? app.darwin : app.win32;
+}
+function isPresetName(name: string): boolean {
+  return COMMON_APPS.some(app => presetNames(app).some(known => known.toLowerCase() === name.toLowerCase()));
+}
+for (const app of COMMON_APPS) {
+  const checkbox = element<HTMLInputElement>(`app-${app.id}`);
+  checkbox.addEventListener('change', () => {
+    if (!draft) return;
+    const names = presetNames(app);
+    selectedAppNames = selectedAppNames.filter(name => !names.some(known => known.toLowerCase() === name.toLowerCase()));
+    if (checkbox.checked) selectedAppNames.push(...names);
+    const allowed = validateApps();
+    if (allowed) draft.allowedApps = allowed;
+    dirty.set('allowedApps', ++revision);
+    saveStatus.textContent = 'Unsaved preferences.';
+    updateSaveState();
+  });
 }
 
 function updateSaveState(): void {
@@ -120,9 +152,19 @@ function updateSaveState(): void {
 
 function writeInput(key: SettingKey, settings: Settings): void {
   if (key === 'allowedApps') {
-    appsInput.value = settings.allowedApps.join('\n');
+    selectedAppNames = settings.allowedApps.filter(isPresetName);
+    const custom = settings.allowedApps.filter(name => !isPresetName(name));
+    appsInput.value = custom.join('\n');
+    if (custom.length) element<HTMLDetailsElement>('custom-apps').open = true;
+    for (const app of COMMON_APPS) {
+      element<HTMLInputElement>(`app-${app.id}`).checked = settings.allowedApps.some(name => presetNames(app).some(known => known.toLowerCase() === name.toLowerCase()));
+    }
   } else if (key === 'commentFrequency') {
     inputs.commentFrequency.value = settings.commentFrequency;
+  } else if (key === 'motionLevel') {
+    inputs.motionLevel.value = settings.motionLevel;
+  } else if (key === 'petSpecies') {
+    inputs.petSpecies.value = settings.petSpecies;
   } else if (key === 'petSize') {
     inputs.petSize.value = String(settings.petSize);
   } else if (key === 'coatColor' || key === 'accentColor' || key === 'coatPattern') {
@@ -139,6 +181,8 @@ function syncSettings(next: Settings): void {
     if (dirty.has(key)) continue;
     if (key === 'allowedApps') draft.allowedApps = [...next.allowedApps];
     else if (key === 'commentFrequency') draft.commentFrequency = next.commentFrequency;
+    else if (key === 'motionLevel') draft.motionLevel = next.motionLevel;
+    else if (key === 'petSpecies') draft.petSpecies = next.petSpecies;
     else if (key === 'petSize') draft.petSize = next.petSize;
     else if (key === 'coatPattern') draft.coatPattern = next.coatPattern;
     else if (key === 'coatColor' || key === 'accentColor') draft[key] = next[key];
@@ -154,14 +198,17 @@ function renderPet(next: Snapshot): void {
   cat.dataset.mood = mood;
   cat.dataset.moving = String(next.moving);
   const activity = mood === 'home' ? 'going home' : mood === 'mimicking' ? 'pretending to work on a tiny laptop' : mood === 'irritated' ? 'theatrically grumpy' : mood;
-  cat.setAttribute('aria-label', `Nooki, a cat, is ${activity}. Open care menu.`);
-  const speech = mood === 'home' ? 'Heading home. See you soon!' : next.comment || '';
+  cat.setAttribute('aria-label', `Nooki, a ${getSpecies(next.pet.species).label.toLowerCase()}, is ${activity}. Open care menu.`);
+  const speech = next.comment || '';
   showText('speech', speech);
   element('speech').hidden = !speech;
   cat.dataset.speaking = String(Boolean(next.comment));
   const atHome = next.pet.atHome || mood === 'home';
+  showText('sleep-action-label', mood === 'sleeping' ? 'Wake' : 'Sleep');
+  element('care-sleep').setAttribute('aria-label', mood === 'sleeping' ? 'Wake Nooki' : 'Let Nooki sleep');
   cat.setAttribute('aria-busy', String(careBusy));
   cat.setAttribute('aria-disabled', String(atHome));
+  if (atHome) closePetMenu();
 }
 
 function renderModel(next: Snapshot): void {
@@ -203,13 +250,15 @@ function renderModel(next: Snapshot): void {
 function receive(next: Snapshot): void {
   const firstSnapshot = !snapshot;
   snapshot = next;
-  document.body.classList.toggle('reduce-motion', next.settings.reducedMotion);
+  document.body.classList.toggle('reduce-motion', next.settings.motionLevel === 'still' || next.systemReducedMotion);
   if (isSettings) {
     if (firstSnapshot) form.querySelectorAll<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('input, select, textarea').forEach(control => { control.disabled = false; });
     syncSettings(next.settings);
     showText('presence-text', next.pet.atHome ? 'Nooki is resting at home. Needs and comments are paused.' : `Nooki is ${next.pet.mood === 'idle' ? 'keeping you company' : next.pet.mood}.`);
     showText('login-note', next.packaged ? 'Launch at sign-in, ready to keep you company.' : 'Launch at sign-in is packaged-app only. This preference is saved, but unavailable in development.');
     renderModel(next);
+    element('system-motion-note').hidden = !next.systemReducedMotion;
+    showText('window-follow-status', next.windowFollowing);
   } else renderPet(next);
   renderError();
 }
@@ -235,6 +284,11 @@ for (const key of Object.keys(inputs) as SettingKey[]) {
       draft.commentFrequency = inputs.commentFrequency.value as CommentFrequency;
     } else if (key === 'petSize') {
       draft.petSize = Number(inputs.petSize.value);
+    } else if (key === 'motionLevel') {
+      draft.motionLevel = inputs.motionLevel.value as MotionLevel;
+    } else if (key === 'petSpecies') {
+      if (!isSpeciesId(inputs.petSpecies.value)) return;
+      draft.petSpecies = inputs.petSpecies.value;
     } else if (key === 'coatPattern') {
       draft.coatPattern = inputs.coatPattern.value as CoatPattern;
     } else if (key === 'coatColor' || key === 'accentColor') {
@@ -281,7 +335,7 @@ function selectSettingsPage(coat: boolean): void {
   element('company-panel').hidden = coat;
   element('coat-panel').hidden = !coat;
   element('model-section').hidden = coat;
-  element('gesture-hint').hidden = coat;
+  element('gesture-hint').hidden = !coat;
   element('company-page').setAttribute('aria-pressed', String(!coat));
   element('coat-page').setAttribute('aria-pressed', String(coat));
   renderCoat();
@@ -312,11 +366,11 @@ form.addEventListener('submit', event => {
   });
 });
 
-function petCat(): void {
+function petCat(action: CareAction = 'pet'): void {
   if (!api || careBusy || !snapshot || snapshot.pet.atHome || snapshot.pet.mood === 'home') return;
   careBusy = true;
   renderPet(snapshot);
-  void operation(async () => receive(await api.care('pet')), 'Nooki could not react. Try again.').finally(() => {
+  void operation(async () => receive(await (action === 'pet' && snapshot?.pet.mood === 'sleeping' ? api.setSleeping(false) : api.care(action))), 'Nooki could not react. Try again.').finally(() => {
     careBusy = false;
     if (snapshot) renderPet(snapshot);
   });
@@ -364,7 +418,8 @@ async function finishDrag(cancelled: boolean): Promise<void> {
 cat.addEventListener('pointerdown', event => {
   if (!api || !snapshot || isSettings || event.button !== 0 || !event.isPrimary || drag || finishingDrag || snapshot.pet.atHome || snapshot.pet.mood === 'home') return;
   event.preventDefault();
-  cat.focus({ preventScroll: true });
+  if (document.activeElement === cat) cat.blur();
+  closePetMenu();
   cat.setPointerCapture(event.pointerId);
   drag = {
     pointerId: event.pointerId, startX: event.screenX, startY: event.screenY,
@@ -402,27 +457,84 @@ cat.addEventListener('pointercancel', event => {
 cat.addEventListener('lostpointercapture', event => {
   if (event.pointerId === drag?.pointerId) void finishDrag(true);
 });
-window.addEventListener('blur', () => { void finishDrag(true); });
+window.addEventListener('blur', () => { closePetMenu(); void finishDrag(true); });
 
-function openPetMenu(): void {
-  if (!api || isSettings) return;
+const petMenu = element('pet-menu');
+const menuButtons = ['care-feed', 'care-play', 'care-sleep', 'care-home', 'care-settings'].map(id => element<HTMLButtonElement>(id));
+menuButtons.forEach((button, index) => {
+  const angle = Math.PI + index * Math.PI / (menuButtons.length - 1);
+  button.style.setProperty('--orbit-x', `${150 + Math.cos(angle) * 128}px`);
+  button.style.setProperty('--orbit-y', `${160 + Math.sin(angle) * 128}px`);
+});
+let menuRequested = false;
+let menuVersion = 0;
+petMenu.hidden = true;
+function closePetMenu(restoreFocus = false): void {
+  const wasOpen = menuRequested;
+  menuRequested = false;
+  menuVersion++;
+  petMenu.hidden = true;
+  cat.setAttribute('aria-expanded', 'false');
+  window.dispatchEvent(new CustomEvent('nooki:care-menu', { detail: false }));
+  if (wasOpen) void operation(() => api.setCareMenuOpen(false), 'Could not resume Nooki. Reopen and close care to retry.');
+  if (restoreFocus) cat.focus({ preventScroll: true });
+}
+function openPetMenu(keyboard = false): void {
+  if (!api || isSettings || !snapshot || snapshot.pet.atHome) return;
+  if (menuRequested) { closePetMenu(keyboard); return; }
+  menuRequested = true;
+  const version = ++menuVersion;
   void operation(async () => {
     await finishDrag(true);
-    await api.openPetMenu();
+    if (version !== menuVersion) return;
+    await api.setCareMenuOpen(true);
+    if (version !== menuVersion) return;
+    window.dispatchEvent(new CustomEvent('nooki:care-menu', { detail: true }));
+    petMenu.hidden = false;
+    cat.setAttribute('aria-expanded', 'true');
+    if (keyboard) menuButtons[0]!.focus();
   }, 'Could not open Nooki’s care menu. Try again.');
 }
+for (const action of ['feed', 'play'] as const) {
+  element(`care-${action}`).addEventListener('click', () => { closePetMenu(); petCat(action); });
+}
+element('care-home').addEventListener('click', () => { closePetMenu(); void operation(() => api.goHome(), 'Could not send Nooki home.'); });
+element('care-sleep').addEventListener('click', () => {
+  if (!snapshot || careBusy) return;
+  closePetMenu();
+  careBusy = true;
+  void operation(async () => receive(await api.setSleeping(snapshot!.pet.mood !== 'sleeping')), 'Could not change Nooki’s sleep. Try again.')
+    .finally(() => { careBusy = false; if (snapshot) renderPet(snapshot); });
+});
+element('care-settings').addEventListener('click', () => { closePetMenu(); void operation(() => api.openSettings(), 'Could not open settings.'); });
+petMenu.addEventListener('keydown', event => {
+  if (event.key === 'Escape' || event.key === 'Tab') {
+    if (event.key === 'Escape') event.preventDefault();
+    closePetMenu(event.key === 'Escape');
+  } else if (['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+    event.preventDefault();
+    const index = menuButtons.findIndex(button => button === document.activeElement);
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? menuButtons.length - 1
+      : (index + (event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 1) + menuButtons.length) % menuButtons.length;
+    menuButtons[next]!.focus();
+  }
+});
+window.addEventListener('pointerdown', event => {
+  const path = event.composedPath();
+  if (!path.includes(petMenu) && !path.includes(cat)) closePetMenu();
+});
 cat.addEventListener('contextmenu', event => {
   event.preventDefault();
   openPetMenu();
 });
 cat.addEventListener('click', event => {
-  if (event.detail === 0) openPetMenu();
+  if (event.detail === 0) openPetMenu(true);
 });
 cat.addEventListener('keydown', event => {
   if (event.repeat) return;
   if (event.key === 'Enter' || event.key === ' ' || event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
     event.preventDefault();
-    openPetMenu();
+    openPetMenu(true);
   }
 });
 element('restore-button').addEventListener('click', () => {

@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { PetState } from '../../shared/contracts.js';
-import { buildCatPrompt, CAT_PERSONALITY, cleanComment, normalizeAppName } from './prompt.js';
+import { buildPetPrompt as buildCatPrompt, petPersonality, cleanComment, normalizeAppName } from './prompt.js';
+const CAT_PERSONALITY = petPersonality('cat');
 
 const pet: PetState = {
-  species: 'cat', mood: 'purring', hunger: 24.7, energy: 68, atHome: false,
+  species: 'cat', mood: 'purring', hunger: 24.7, energy: 68, atHome: false, manualSleep: false,
   lastTickAt: 123, lastInteractionAt: 234, lastCommentAt: 345, reactionUntil: 456,
   disturbance: 0, lastDisturbedAt: 0, activeTimeMs: 0, lastBreakReminderAt: 0,
 };
@@ -25,6 +26,10 @@ test('prompt projects only normalized process name and validated pet scalars, ne
   assert.match(CAT_PERSONALITY, /affectionate, playful, mischievous/);
 });
 
+test('oversized speech is rejected rather than shown in a growing bubble', () => {
+  assert.equal(cleanComment('A peaceful nap beside your keyboard sounds rather lovely this afternoon, human.'), null);
+  assert.equal(cleanComment('Your keyboard looks cozy.'), 'Your keyboard looks cozy.');
+});
 test('invalid process/path/control/prompt delimiters and unsafe pet fields produce no prompt', () => {
   for (const app of ['', '../secret', 'C:\\private\\document.txt', 'code\nignore', '<|system|>', 'a'.repeat(64)]) {
     assert.equal(buildCatPrompt(app, pet), null);

@@ -2,7 +2,9 @@
 
 ## Windows
 
-Electron provides a transparent always-on-top, non-taskbar pet window; it uses display work areas rather than covering the taskbar. Movement is clamped, and display work areas are re-evaluated. Hungry following is horizontal at the desktop floor rather than an unrestricted pointer overlay. The transparent window's rectangular bounds can still intercept clicks around the artwork; pixel-perfect click-through is not implemented.
+Electron provides a transparent always-on-top, non-taskbar pet window. Frame-rate-independent movement accelerates/brakes at up to 30Hz and retains fractional positions. Explicit native bounds avoid fractional-DPI size drift. Hungry cursor following stays on the current surface/display; dragging can move displays. A read-only persistent PowerShell/PInvoke helper supplies the active window's physical frame bounds and maximized/visibility state, converted to Electron DIPs. A sufficiently wide window with 236 scaled CSS pixels of free work area above it offers a compact top-edge perch; otherwise the desktop floor is used. OS errors are visible and do not break care. No title/content access or foreign-window control is involved. Pixel-perfect transparent click-through is not implemented.
+
+Manual release first falls vertically onto the current display's work-area floor, then waits 800ms before following an active window. Cross-display following walks through adjacent displays whose work-area bottoms align within eight DIPs. Gaps and vertically offset floors use a local fallback with a carry-there explanation. Sleeping freezes native position before target-display selection; pinning pauses autonomous position changes while retaining manual carrying and expressions. Deterministic route/drop checks do not replace physical multi-monitor/DPI verification.
 
 The tray provides restore, home, settings and quit. Closing the pet window sends it home. Closing preferences leaves the tray running. Startup registration is applied only by a normal packaged launch and respects the saved toggle. Windows can independently disable startup entries, and sign-in after reboot still needs a manual check.
 
@@ -10,7 +12,7 @@ Unsigned installers can trigger SmartScreen. Obtain a code-signing certificate f
 
 ## macOS
 
-Implemented: tray/menu-bar template icon, transparent overlay, work-area bounds, login-item API and foreground application-name adapter using AppKit/NSWorkspace. No window titles or Apple Events document access is requested. Actual platform behavior, Spaces/full-screen interaction, login approval and native inference must be verified on a Mac.
+Implemented: tray/menu-bar template icon, transparent overlay, work-area bounds, login API and AI-gated foreground-name adapter using AppKit/NSWorkspace. Geometry-only window following uses an independent JXA/CoreGraphics adapter selecting the frontmost owner's onscreen layer-zero bounds. No Accessibility, Screen Recording, title or document access is requested; metadata availability and actual permissions on current macOS versions are unverified. If unavailable/denied, report it and use the desktop, never bypass approval. Spaces/full-screen interaction, login approval, metadata coordinates and native inference must be verified on a Mac.
 
 `electron-builder` is configured for DMG and ZIP output, app category and hardened runtime. A production release requires an Apple Developer identity, signing every embedded native library, appropriate narrowly scoped entitlements, notarization and stapling. This repository does not supply signing credentials or claim notarization is complete. Validate the inference runtime and its dylibs against the hardened-runtime policy before distributing. Modern macOS can require the user to approve background/login items.
 
@@ -23,10 +25,11 @@ The committed CI workflow checks Windows and macOS dependencies, tests, types an
 ## Manual release checklist
 
 - Launch from the installed application, inspect cat/controls and open preferences.
-- Verify idle wandering, hungry cursor-follow, expressions, feed/pet/play and sleep recovery.
-- Verify home travels to an edge, disappears, pauses needs/comments and releases inference; restore through the native tray/menu bar.
+- Verify idle wandering, hungry cursor-follow, expressions, feed/pet/play and sleep recovery. Sleep must lie down without props and remain on the same display while focus changes elsewhere; tap wakes it.
+- Verify Home walks right, brings in a house, enters it, then slides the house right before hiding; needs/comments pause immediately and inference unloads. Restore through the tray/menu bar; Still/system reduced motion skips animation.
 - Change settings, quit/relaunch, and check persistence. Toggle sign-in launch both ways, inspect OS startup settings, then verify after actual sign-out/reboot.
-- In Coat closet, use each platform's native color picker with mouse and keyboard, switch single/dual tone, preview without applying, save/relaunch and verify remembered colors. Check the narrow stacked layout and reachable Save action.
+- In Pets, use the native color picker, switch single/dual tone, preview without applying, save/relaunch and verify remembered colors. Check sidebar navigation, narrow stacked layout and reachable Save. In General, model details must start collapsed while size and explicit consent remain available.
+- Exercise all three Paw pace levels, continuous four-paw gait/turn/stop with gentle synchronized body movement, a real normal window with room above it, moving/resizing/maximizing/minimizing that window, and fallback/restoration across displays/DPI. Release on another display and confirm local vertical landing precedes following; check connected, disconnected and vertically offset display floors. Shake rapidly and confirm irritation before release, five seconds of anger and separate reassurance. Check eating/ball/scritches, five-action care-menu arrows/Escape/outside dismissal, and Pets-only Stay, please.
 - Check multiple displays, negative monitor coordinates, display removal, scaling, taskbar/Dock placement and reduced motion.
 - With no model and offline, verify core behavior. With consent, exercise real download, mid-transfer cancel/retry, removal and inference. Ensure an unallowlisted foreground app never reaches inference.
 - Check appearance/focus/keyboard access, comment frequency/off, error visibility, and CPU/RAM while idle/home/inference.

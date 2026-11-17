@@ -19,6 +19,8 @@ Nooki wanders along the current display's work-area floor. Nearby, their head an
 
 Sometimes Nooki copies your work with a tiny laptop, without inspecting what you are doing. **Stretch those paws** offers an affectionate reminder after 45 minutes of active companion time; home pauses that timer. **Pocket or pounce?** adjusts pet size. **Talkativeness** controls occasional comments, including reminders.
 
+In **Settings → Coat closet**, choose **Single tone** or **Dual tone**, pick coat and contrast colors, or start with Lilac cream, Cocoa cream, Peach milk or Storm cloud. The live 3D preview only tries them on: **Save preferences** applies them to the desktop and remembers them across launches. Single tone keeps your contrast color for switching back. **Revert coat edits** restores the last saved coat without discarding other preference edits.
+
 Repeated long drags build a disturbance score that fades over time. Nooki may briefly look grumpy and joke about closing an app, but **cannot and will not close or control another application**. Scritches help them settle. This is expressive play, never a punishment.
 
 **Launch at sign-in** defaults on in a packaged app. Development runs save the preference without registering the Electron development executable as a startup application. The OS may still require startup approval; see [platform limitations](docs/PLATFORMS.md).
@@ -49,7 +51,7 @@ npm run pack
 npm run dist -- --win nsis
 ```
 
-`npm run smoke` opens the actual Electron app briefly and exercises real transparent WebGL rendering, left/right gaze and neutral reset, reduced motion, isolated preload/IPC, care, edge-home hiding, needs pause, restore, settings, rejected privileged calls, download consent and persistence. It uses ignored `.smoke-data`, never changes login registration, and never downloads a model. Expected rejected-call errors appear in its output.
+`npm run smoke` opens the actual Electron app briefly and exercises real transparent WebGL rendering, left/right gaze and neutral reset, reduced motion, isolated preload/IPC, care, edge-home hiding, needs pause, restore, settings, rejected privileged calls, download consent and persistence. It also checks draft-only coat preview, presets/custom color inputs, saved single/dual materials, remembered contrast, reopened settings and compact-window Save visibility. It uses ignored `.smoke-data`, never changes login registration, and never downloads a model. Expected rejected-call errors appear in its output.
 
 After you have independently consented and downloaded the catalog model into `.smoke-data\models`, `npx electron . --smoke-test --smoke-inference` also exercises the embedded backend. This flag itself does **not** download a model. Do not copy model weights into source control or the installer.
 

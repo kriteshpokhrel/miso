@@ -17,6 +17,8 @@ Feed, pet and play; gentle hunger and energy; hungry cursor following; scripted 
 
 The pet sometimes imitates work with a tiny laptop and gives affectionate break reminders. Excessive dragging builds a fading disturbance score and a temporary grumpy reaction, never actual control over other applications. Desktop chrome stays hidden: only the pet and occasional speech, with care in a context menu. Size is adjustable; settings use playful but clear labels such as Talkativeness.
 
+**Coat closet** in Settings offers single- or dual-tone fur, independent coat/contrast color pickers and four coordinated palettes. A local live 3D preview tries on draft colors without changing the desktop pet; Save preferences applies and persists them. Single tone remembers the contrast color for later. Default fur is lilac and cream; eyes and facial details retain their own colors.
+
 Head and eyes turn smoothly toward a nearby cursor, including just outside the pet window, and return to neutral when it leaves. Tracking stops at home, asleep, during dragging and under reduced motion. Procedural local geometry requires WebGL 2; no remote art or GitHub mascot assets are used.
 
 Optional embedded local inference, never required for core behavior. Download consent must disclose model size and license. Only explicitly allowlisted process names and pet personality/state may reach inference: never window titles or document contents. No telemetry or accounts.

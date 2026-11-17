@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import { buildSync } from 'esbuild';
 import type { NookiApi, Settings, Snapshot } from '../shared/contracts.js';
+import { DEFAULT_SETTINGS } from '../shared/contracts.js';
 
 interface ControlEvent {
   preventDefault(): void;
@@ -30,6 +31,7 @@ class Control {
   attributes: Record<string, string> = {};
   children: Control[] = [];
   classList = { toggle: () => {} };
+  style = { setProperty: (_name: string, _value: string) => {} };
   captured = new Set<number>();
   listeners = new Map<string, Array<(event: ControlEvent) => void>>();
   addEventListener(name: string, handler: (event: ControlEvent) => void): void {
@@ -57,7 +59,7 @@ const markup = readFileSync(new URL('./index.html', import.meta.url), 'utf8');
 function state(): Snapshot {
   return {
     pet: { species: 'cat', hunger: 20, energy: 80, mood: 'idle', atHome: false, lastTickAt: 0, lastInteractionAt: 0, lastCommentAt: 0, reactionUntil: 0, disturbance: 0, lastDisturbedAt: 0, activeTimeMs: 0, lastBreakReminderAt: 0 },
-    settings: { launchAtLogin: true, commentFrequency: 'quiet', allowedApps: [], aiEnabled: false, reducedMotion: false, petSize: 1, breakReminders: true },
+    settings: { ...DEFAULT_SETTINGS, allowedApps: [] },
     model: { phase: 'not-installed', downloadedBytes: 0, totalBytes: 100 },
     modelInfo: { id: 'test', name: 'Test local model', sizeBytes: 100, license: 'Test license', licenseUrl: 'https://example.invalid/license', sourceUrl: 'https://example.invalid/model', resourceNote: 'Test resource disclosure' },
     comment: null, error: null, platform: 'win32', packaged: false, moving: false,
@@ -75,11 +77,12 @@ function mount(overrides: Partial<NookiApi> = {}, settingsView = true) {
     assert.ok(control, id);
     return control;
   };
-  get('settings-form').children = ['launch-at-login', 'comment-frequency', 'reduced-motion', 'ai-enabled', 'allowed-apps', 'pet-size', 'break-reminders'].map(get);
+  get('settings-form').children = ['launch-at-login', 'comment-frequency', 'reduced-motion', 'ai-enabled', 'allowed-apps', 'pet-size', 'break-reminders', 'coat-pattern', 'coat-color', 'accent-color'].map(get);
   let nextSnapshot = state();
   let now = 0;
   let listener: (snapshot: Snapshot) => void = () => {};
   const calls: Settings[] = [];
+  const previews: Array<{ snapshot: Snapshot; active: boolean }> = [];
   const api: NookiApi = {
     getSnapshot: async () => nextSnapshot,
     care: async () => nextSnapshot,
@@ -100,13 +103,14 @@ function mount(overrides: Partial<NookiApi> = {}, settingsView = true) {
   };
   runInNewContext(source, {
     URLSearchParams, location: { search: settingsView ? '?view=settings' : '' }, performance: { now: () => now },
-    window: { nooki: api, addEventListener() {} },
+    CustomEvent,
+    window: { nooki: api, addEventListener() {}, dispatchEvent(event: CustomEvent) { previews.push(event.detail); } },
     document: {
       body: new Control(), getElementById: (id: string) => controls.get(id),
       querySelectorAll: () => [...controls.values()],
     },
   });
-  return { get, calls, advance(ms: number) { now += ms; }, emit(snapshot: Snapshot) { nextSnapshot = snapshot; listener(snapshot); } };
+  return { get, calls, previews, advance(ms: number) { now += ms; }, emit(snapshot: Snapshot) { nextSnapshot = snapshot; listener(snapshot); } };
 }
 
 test('snapshot updates preserve preference drafts and edits made during save', async () => {
@@ -132,6 +136,99 @@ test('snapshot updates preserve preference drafts and edits made during save', a
   resolveSave({ ...incoming, settings: sent });
   await settle();
   assert.equal(ui.get('allowed-apps').value, 'Safari');
+  assert.equal(ui.get('save-button').disabled, false);
+  assert.match(ui.get('save-status').textContent, /newer unsaved/);
+});
+
+test('coat closet previews drafts without saving, preserves them across snapshots, and retains contrast in single mode', async () => {
+  const ui = mount();
+  await settle();
+  ui.get('coat-page').dispatch('click');
+  ui.get('palette-cocoa').dispatch('click');
+  assert.equal(ui.calls.length, 0);
+  assert.equal(ui.get('company-panel').hidden, true);
+  assert.equal(ui.get('coat-panel').hidden, false);
+  assert.equal(ui.previews.at(-1)?.active, true);
+  assert.equal(ui.previews.at(-1)?.snapshot.settings.coatColor, '#79584f');
+  ui.get('coat-pattern').value = 'single';
+  ui.get('coat-pattern').dispatch('change');
+  assert.equal(ui.get('accent-color').disabled, true);
+  ui.emit(state());
+  assert.equal(ui.get('coat-color').value, '#79584f');
+  assert.equal(ui.get('accent-color').value, '#f4dfc3');
+  ui.get('coat-pattern').value = 'dual';
+  ui.get('coat-pattern').dispatch('change');
+  assert.equal(ui.get('accent-color').disabled, false);
+  ui.get('settings-form').dispatch('submit');
+  await settle();
+  assert.equal(ui.calls[0]?.coatPattern, 'dual');
+  assert.equal(ui.calls[0]?.coatColor, '#79584f');
+  assert.equal(ui.calls[0]?.accentColor, '#f4dfc3');
+  ui.get('company-page').dispatch('click');
+  assert.equal(ui.previews.at(-1)?.active, false);
+});
+
+test('reverting coat edits leaves other unsaved settings intact', async () => {
+  const ui = mount();
+  await settle();
+  ui.get('comment-frequency').value = 'chatty';
+  ui.get('comment-frequency').dispatch('change');
+  ui.get('palette-cloud').dispatch('click');
+  ui.get('revert-coat').dispatch('click');
+  assert.equal(ui.get('coat-color').value, DEFAULT_SETTINGS.coatColor);
+  assert.equal(ui.get('comment-frequency').value, 'chatty');
+  assert.equal(ui.get('save-button').disabled, false);
+  ui.get('settings-form').dispatch('submit');
+  await settle();
+  assert.equal(ui.calls[0]?.coatColor, DEFAULT_SETTINGS.coatColor);
+  assert.equal(ui.calls[0]?.commentFrequency, 'chatty');
+});
+
+test('color edits made during save stay in the preview and remain unsaved', async () => {
+  let resolveSave!: (value: Snapshot) => void;
+  let sent!: Settings;
+  const ui = mount({ updateSettings: settings => {
+    sent = settings;
+    return new Promise(resolve => { resolveSave = resolve; });
+  } });
+  await settle();
+  ui.get('coat-color').value = '#123456';
+  ui.get('coat-color').dispatch('input');
+  ui.get('settings-form').dispatch('submit');
+  ui.get('coat-color').value = '#654321';
+  ui.get('coat-color').dispatch('input');
+  resolveSave({ ...state(), settings: sent });
+  await settle();
+  assert.equal(ui.get('coat-color').value, '#654321');
+  assert.equal(ui.previews.at(-1)?.snapshot.settings.coatColor, '#654321');
+  assert.equal(ui.get('save-button').disabled, false);
+});
+
+test('failed coat saves report the error without losing draft colors', async () => {
+  const ui = mount({ updateSettings: async () => { throw new Error('Disk is full.'); } });
+  await settle();
+  ui.get('palette-peach').dispatch('click');
+  ui.get('settings-form').dispatch('submit');
+  await settle();
+  assert.match(ui.get('settings-error').textContent, /Disk is full/);
+  assert.equal(ui.get('coat-color').value, '#d99576');
+  assert.equal(ui.get('save-button').disabled, false);
+});
+
+test('reverting a coat during save is treated as a newer draft instead of being overwritten', async () => {
+  let resolveSave!: (value: Snapshot) => void;
+  let sent!: Settings;
+  const ui = mount({ updateSettings: settings => {
+    sent = settings;
+    return new Promise(resolve => { resolveSave = resolve; });
+  } });
+  await settle();
+  ui.get('palette-cocoa').dispatch('click');
+  ui.get('settings-form').dispatch('submit');
+  ui.get('revert-coat').dispatch('click');
+  resolveSave({ ...state(), settings: sent });
+  await settle();
+  assert.equal(ui.get('coat-color').value, DEFAULT_SETTINGS.coatColor);
   assert.equal(ui.get('save-button').disabled, false);
   assert.match(ui.get('save-status').textContent, /newer unsaved/);
 });

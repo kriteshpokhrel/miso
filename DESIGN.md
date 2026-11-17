@@ -2,10 +2,10 @@
 
 ## Direction and surfaces
 
-An original, sculpted lilac cat keeps company on a transparent desktop stage. Rounded volumes, glossy violet eyes, cream muzzle and chest, blush cheeks and an apricot ear create an expressive toy-like character. Real-time Three.js geometry replaces the previous flat SVG at the user's request; no GitHub mascot geometry, artwork or textures are reused. Settings retain their compact, familiar utility sheet rather than dashboard cards.
+An original, sculpted cat keeps company on a transparent desktop stage. Rounded volumes, glossy violet eyes, blush cheeks and a contrasting ear, muzzle and chest create an expressive toy-like character. Default fur is lilac and cream; the user can choose her own single- or dual-tone coat. Real-time Three.js geometry replaces the previous flat SVG at the user's request; no GitHub mascot geometry, artwork or textures are reused. Settings retain their compact, familiar utility sheet rather than dashboard cards.
 
 - **Pet (Experience):** a 300 × 300 transparent scene with only the character and occasional speech. The WebGL canvas occupies the lower 280 × 236 area, leaving room above for speech. There is no persistent desktop toolbar or opaque scene backdrop. Explicit native main-process `setBounds` and `setZoomFactor` implement the saved pet size; the renderer never scales the cat from that setting.
-- **Preferences:** `?view=settings` selects the scrollable utility sheet. A brief gesture guide introduces tapping, dragging and the native care menu. Everyday behavior comes first, process-name privacy second, optional model disclosure and consent last.
+- **Preferences (Operate):** `?view=settings` selects the scrollable utility sheet, with Everyday company and Coat closet page buttons. A brief gesture guide introduces tapping, dragging and the native care menu. Everyday behavior comes first, process-name privacy second, optional model disclosure and consent last. A sticky Save preferences bar keeps the action reachable on compact windows.
 - No external fonts, images, network requests or navigable remote links. Model license/source URLs are plain text.
 
 ## Implemented tokens
@@ -18,7 +18,7 @@ An original, sculpted lilac cat keeps company on a transparent desktop stage. Ro
 | Separator | `#cbd6cc` |
 | Sage action | `#365b48` |
 | Sculpted lilac material | `#bda6df` |
-| Apricot material | `#e9b172` |
+| Peach preset fur | `#d99576` |
 | Cream material | `#fff0d9` |
 | Glossy iris | `#5244a1` |
 | Keyboard focus | `#6a4290`, 3px outline |
@@ -40,6 +40,10 @@ Preferences are explicit-save. Each changed field has a revision; live snapshots
 
 Playful labels retain plain-language descriptions: **Morning pounce** is launch at sign-in; **Talkativeness** is comment frequency; **Easy paws** is reduced motion; **Pocket or pounce?** offers 70%, 100%, 130% and 150% pet sizes; **Stretch those paws** enables a loving reminder after 45 minutes of active companion time, paused at home. The new size and reminder values participate in the same revision-safe full-settings save.
 
+**Coat closet** preserves the quiet sage settings world. A roomy neutral preview stage sits beside the pattern and native color controls; narrow windows stack them. Lilac cream, Cocoa cream, Peach milk and Storm cloud presets use named, two-part swatches with pressed-state semantics, not color-only labels. The single-tone coat uses one fur material color throughout; dual tone recolors the ear/patch, muzzle, chest, paw tips and tail tip. Eyes, nose, cheeks and props are not recolored. Choosing single tone disables the contrast picker without erasing its value. Revert coat edits touches only appearance; pending saves cannot overwrite newer color edits or reversions.
+
+The preview creates the same 3D model lazily when Coat closet opens, with quiet idle behavior rather than desktop wandering/cursor tracking. Draft changes update material uniforms without rebuilding geometry. A typed local DOM event carries the revision-preserved draft to the renderer; it is not privileged IPC and cannot change the actual pet. Save preferences uses the existing validated settings bridge and atomic store. Old settings gain defaults only for absent appearance fields; invalid pattern or non-six-digit hex colors fail explicitly. All color customization remains local.
+
 The model section discloses actual snapshot metadata, including approximate download size and exact bytes, requires separate download consent, and exposes progress, cancellation, retry and removal. Cancellation remains available while a long-running download bridge call is pending. Model controls do not submit or discard preference drafts. Core scripted behavior needs no model.
 
 ## Accessibility and motion
@@ -48,7 +52,7 @@ Native labels, selects, textareas and checkboxes retain keyboard behavior. All s
 
 The saved reduced-motion preference and operating-system `prefers-reduced-motion` both stop all renderer animation and transitions, including typing, irritation and talking. There is no renderer-driven wandering or entrance animation. Motion-free states retain their distinct expressions and props.
 
-`pet-scene.ts` owns a transparent orthographic WebGL 2 scene, local lighting and a floor shadow. Low-power GPU preference, a 30fps draw cap, device-pixel-ratio cap of 2 and a 512px shadow map bound rendering costs. Hidden windows stop the loop; reduced motion renders only on state/viewport changes. Geometry, materials, renderer and event observers are disposed on unload. Settings do not create a WebGL context. Unsupported graphics, context loss and frame errors produce visible alerts rather than a pretend flat fallback. Three.js's MIT notice ships with the renderer.
+`pet-scene.ts` owns a transparent orthographic WebGL 2 scene, local lighting and a desktop floor shadow. Low-power GPU preference, a 30fps draw cap, device-pixel-ratio cap of 2 and a 512px shadow map bound rendering costs. Hidden windows stop the loop; reduced motion renders only on state/viewport changes. Geometry, materials, renderer and event observers are disposed on unload. Everyday company does not create a WebGL context; Coat closet creates one on first opening and suspends its loop when leaving the page. The preview omits the desktop shadow. Unsupported graphics, context loss and frame errors produce visible alerts rather than a pretend flat fallback; colors remain editable/saveable if preview graphics fail. Three.js's MIT notice ships with the renderer.
 
 ## Verification boundary
 

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
-import type { Attention, Mood } from '../shared/contracts.js';
+import type { Attention, CoatColors, Mood } from '../shared/contracts.js';
+import { DEFAULT_SETTINGS } from '../shared/contracts.js';
 
 export interface CharacterPose {
   mood: Mood;
@@ -20,10 +21,10 @@ export function createCatModel() {
     return result;
   };
   const fur = material('#bda6df');
-  const darkFur = material('#9b80c3');
+  const browFur = material('#9b80c3');
   const cream = material('#fff0d9');
   const peach = material('#efae99');
-  const apricot = material('#e9b172');
+  const markings = material(DEFAULT_SETTINGS.accentColor);
   const ink = material('#433047', 0.36);
   const iris = material('#5244a1', 0.18, 0.8);
   const pupil = material('#16162d', 0.12, 1);
@@ -54,39 +55,39 @@ export function createCatModel() {
   const torso = new THREE.Group();
   root.add(torso);
   oval(torso, fur, [0, 0.67, 0], [0.61, 0.67, 0.46]);
-  oval(torso, cream, [0, 0.66, 0.353], [0.37, 0.48, 0.15]);
-  const feet = [-1, 1].map(side => oval(torso, darkFur, [side * 0.34, 0.15, 0.24], [0.28, 0.17, 0.34]));
+  oval(torso, markings, [0, 0.66, 0.353], [0.37, 0.48, 0.15]);
+  const feet = [-1, 1].map(side => oval(torso, fur, [side * 0.34, 0.15, 0.24], [0.28, 0.17, 0.34]));
   const arms = [-1, 1].map(side => {
     const pivot = new THREE.Group();
     pivot.position.set(side * 0.48, 0.89, 0.23);
     torso.add(pivot);
     oval(pivot, fur, [0, -0.26, 0.08], [0.18, 0.37, 0.2]);
-    oval(pivot, cream, [0, -0.49, 0.13], [0.18, 0.13, 0.19]);
+    oval(pivot, markings, [0, -0.49, 0.13], [0.18, 0.13, 0.19]);
     return pivot;
   });
   const tail = new THREE.Group();
   tail.position.set(0.39, 0.37, -0.18);
   torso.add(tail);
   line(tail, [[0, 0, 0], [0.43, -0.02, -0.05], [0.79, 0.17, 0], [0.86, 0.54, 0], [0.65, 0.66, 0.02]], fur, 0.115);
-  oval(tail, cream, [0.65, 0.66, 0.02], [0.12, 0.12, 0.12]);
+  oval(tail, markings, [0.65, 0.66, 0.02], [0.12, 0.12, 0.12]);
 
   const head = new THREE.Group();
   head.position.set(0, 1.63, 0.035);
   root.add(head);
   oval(head, fur, [0, 0, 0], [0.92, 0.79, 0.64]);
-  oval(head, apricot, [0.64, 0.37, -0.015], [0.29, 0.38, 0.51]);
+  oval(head, markings, [0.64, 0.37, -0.015], [0.29, 0.38, 0.51]);
   const ears = [-1, 1].map(side => {
     const ear = new THREE.Group();
     ear.position.set(side * 0.62, 0.58, -0.01);
     ear.rotation.z = side * -0.24;
     head.add(ear);
-    const outer = mesh(new THREE.ConeGeometry(0.34, 0.69, 32, 1), side === 1 ? apricot : fur, ear);
+    const outer = mesh(new THREE.ConeGeometry(0.34, 0.69, 32, 1), side === 1 ? markings : fur, ear);
     outer.scale.z = 0.62;
-    oval(ear, side === 1 ? apricot : fur, [0, -0.17, 0], [0.33, 0.2, 0.21]);
+    oval(ear, side === 1 ? markings : fur, [0, -0.17, 0], [0.33, 0.2, 0.21]);
     const inner = mesh(new THREE.ConeGeometry(0.22, 0.43, 24), peach, ear);
     inner.position.set(0, -0.025, 0.125);
     inner.scale.z = 0.23;
-    oval(ear, side === 1 ? apricot : fur, [0, 0.33, 0], [0.025, 0.035, 0.025]);
+    oval(ear, side === 1 ? markings : fur, [0, 0.33, 0], [0.025, 0.035, 0.025]);
     return ear;
   });
   const eyes = [-1, 1].map(side => {
@@ -103,12 +104,12 @@ export function createCatModel() {
     oval(gaze, sparkle, [0.058, -0.08, 0.241], [0.025, 0.028, 0.012]);
     const closed = line(head, [[side * 0.395 - 0.18, 0.04, 0.699], [side * 0.395, 0.095, 0.73], [side * 0.395 + 0.18, 0.04, 0.699]], ink, 0.025);
     closed.visible = false;
-    const brow = line(head, [[-0.17, 0, 0], [0, 0.04, 0.015], [0.17, 0, 0]], darkFur, 0.027);
+    const brow = line(head, [[-0.17, 0, 0], [0, 0.04, 0.015], [0.17, 0, 0]], browFur, 0.027);
     brow.position.set(side * 0.4, 0.405, 0.56);
     return { socket, gaze, closed, brow };
   });
-  oval(head, cream, [-0.135, -0.285, 0.584], [0.21, 0.16, 0.14]);
-  oval(head, cream, [0.135, -0.285, 0.584], [0.21, 0.16, 0.14]);
+  oval(head, markings, [-0.135, -0.285, 0.584], [0.21, 0.16, 0.14]);
+  oval(head, markings, [0.135, -0.285, 0.584], [0.21, 0.16, 0.14]);
   oval(head, ink, [0, -0.214, 0.729], [0.071, 0.047, 0.041]);
   const smile = line(head, [[-0.17, -0.32, 0.725], [-0.085, -0.365, 0.754], [0, -0.31, 0.755], [0.085, -0.365, 0.754], [0.17, -0.32, 0.725]], ink, 0.015);
   const frown = line(head, [[-0.12, -0.36, 0.733], [0, -0.31, 0.76], [0.12, -0.36, 0.733]], ink, 0.018);
@@ -155,6 +156,12 @@ export function createCatModel() {
 
   let lookX = 0;
   let lookY = 0;
+  function setCoat(colors: CoatColors): void {
+    fur.color.set(colors.coatColor);
+    markings.color.set(colors.coatPattern === 'single' ? colors.coatColor : colors.accentColor);
+    browFur.color.copy(fur.color).multiplyScalar(0.5);
+  }
+  setCoat(DEFAULT_SETTINGS);
   function pose(state: CharacterPose, elapsed: number, delta = 1 / 30): void {
     const motion = !state.reducedMotion;
     const time = motion ? elapsed : 0;
@@ -213,5 +220,5 @@ export function createCatModel() {
     for (const geometry of geometries) geometry.dispose();
     for (const surface of materials) surface.dispose();
   }
-  return { root, head, eyes, arms, ears, mouth, smile, frown, laptop, ball, hearts, sleep, pose, dispose };
+  return { root, head, eyes, arms, ears, mouth, smile, frown, laptop, ball, hearts, sleep, pose, setCoat, coatMaterials: { fur, markings }, dispose };
 }

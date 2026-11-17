@@ -1,6 +1,12 @@
 export type Mood = 'idle' | 'walking' | 'hungry' | 'playing' | 'purring' | 'sleeping' | 'home' | 'mimicking' | 'irritated';
 export type CareAction = 'feed' | 'pet' | 'play';
 export type CommentFrequency = 'off' | 'quiet' | 'balanced' | 'chatty';
+export type CoatPattern = 'single' | 'dual';
+export interface CoatColors {
+  coatPattern: CoatPattern;
+  coatColor: string;
+  accentColor: string;
+}
 
 export interface PetState {
   species: 'cat';
@@ -18,7 +24,7 @@ export interface PetState {
   lastBreakReminderAt: number;
 }
 
-export interface Settings {
+export interface Settings extends CoatColors {
   launchAtLogin: boolean;
   commentFrequency: CommentFrequency;
   allowedApps: string[];
@@ -90,4 +96,7 @@ export const DEFAULT_SETTINGS: Settings = {
   reducedMotion: false,
   petSize: 1,
   breakReminders: true,
+  coatPattern: 'dual',
+  coatColor: '#bda6df',
+  accentColor: '#fff0d9',
 };

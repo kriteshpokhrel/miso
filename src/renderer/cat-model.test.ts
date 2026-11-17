@@ -72,3 +72,24 @@ test('character teardown releases every attached geometry and material', () => {
   cat.dispose();
   assert.equal(released, resources.size);
 });
+
+test('single and dual coats recolor existing fur materials without rebuilding the rig or coloring the eye whites', () => {
+  const cat = createCatModel();
+  try {
+    const originalHead = cat.head.children[0];
+    const eyeWhite = cat.eyes[0]!.socket.children[0];
+    assert.ok(eyeWhite instanceof Mesh);
+    const eyeMaterial = eyeWhite.material;
+    cat.setCoat({ coatPattern: 'dual', coatColor: '#79584f', accentColor: '#f4dfc3' });
+    assert.equal(cat.coatMaterials.fur.color.getHexString(), '79584f');
+    assert.equal(cat.coatMaterials.markings.color.getHexString(), 'f4dfc3');
+    cat.setCoat({ coatPattern: 'single', coatColor: '#79584f', accentColor: '#f4dfc3' });
+    assert.equal(cat.coatMaterials.markings.color.getHexString(), '79584f');
+    cat.setCoat({ coatPattern: 'dual', coatColor: '#79584f', accentColor: '#f4dfc3' });
+    assert.equal(cat.coatMaterials.markings.color.getHexString(), 'f4dfc3');
+    assert.equal(cat.head.children[0], originalHead);
+    assert.equal(eyeWhite.material, eyeMaterial);
+    assert.notEqual(eyeMaterial, cat.coatMaterials.fur);
+    assert.notEqual(eyeMaterial, cat.coatMaterials.markings);
+  } finally { cat.dispose(); }
+});

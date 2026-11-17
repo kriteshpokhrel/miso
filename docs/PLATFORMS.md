@@ -26,6 +26,7 @@ The committed CI workflow checks Windows and macOS dependencies, tests, types an
 - Verify idle wandering, hungry cursor-follow, expressions, feed/pet/play and sleep recovery.
 - Verify home travels to an edge, disappears, pauses needs/comments and releases inference; restore through the native tray/menu bar.
 - Change settings, quit/relaunch, and check persistence. Toggle sign-in launch both ways, inspect OS startup settings, then verify after actual sign-out/reboot.
+- In Coat closet, use each platform's native color picker with mouse and keyboard, switch single/dual tone, preview without applying, save/relaunch and verify remembered colors. Check the narrow stacked layout and reachable Save action.
 - Check multiple displays, negative monitor coordinates, display removal, scaling, taskbar/Dock placement and reduced motion.
 - With no model and offline, verify core behavior. With consent, exercise real download, mid-transfer cancel/retry, removal and inference. Ensure an unallowlisted foreground app never reaches inference.
 - Check appearance/focus/keyboard access, comment frequency/off, error visibility, and CPU/RAM while idle/home/inference.

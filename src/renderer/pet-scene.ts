@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { createCatModel } from './cat-model.js';
 import type { Attention, Snapshot } from '../shared/contracts.js';
 
-export function createPetScene(canvas: HTMLCanvasElement, onError: (message: string | null) => void) {
+export function createPetScene(canvas: HTMLCanvasElement, onError: (message: string | null) => void, options: { preview?: boolean } = {}) {
   const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: 'low-power' });
   renderer.setClearColor(0x000000, 0);
   renderer.shadowMap.enabled = true;
@@ -33,6 +33,7 @@ export function createPetScene(canvas: HTMLCanvasElement, onError: (message: str
   floor.rotation.x = -Math.PI / 2;
   floor.position.y = -0.025;
   floor.receiveShadow = true;
+  floor.visible = !options.preview;
   scene.add(floor);
   const cat = createCatModel();
   scene.add(cat.root);
@@ -43,9 +44,10 @@ export function createPetScene(canvas: HTMLCanvasElement, onError: (message: str
   let previousTime = 0;
   let lost = false;
   let disposed = false;
+  let active = true;
 
   function render(time: number): void {
-    if (!state || lost || disposed) return;
+    if (!state || lost || disposed || !active) return;
     const delta = Math.min(0.1, previousTime ? (time - previousTime) / 1000 : 1 / 30);
     previousTime = time;
     try {
@@ -65,10 +67,12 @@ export function createPetScene(canvas: HTMLCanvasElement, onError: (message: str
     canvas.dataset.lookX = cat.head.rotation.y.toFixed(3);
     canvas.dataset.lookY = cat.head.rotation.x.toFixed(3);
     canvas.dataset.expression = state.pet.mood;
+    canvas.dataset.coatColor = cat.coatMaterials.fur.color.getHexString();
+    canvas.dataset.accentColor = cat.coatMaterials.markings.color.getHexString();
   }
   function animate(time: number): void {
     frame = 0;
-    if (disposed || lost || document.hidden || !state) return;
+    if (disposed || lost || document.hidden || !state || !active) return;
     if (time - previousTime >= 1000 / 30) render(time);
     if (!state.settings.reducedMotion && !preference.matches) frame = requestAnimationFrame(animate);
   }
@@ -76,12 +80,13 @@ export function createPetScene(canvas: HTMLCanvasElement, onError: (message: str
     if (frame) cancelAnimationFrame(frame);
     frame = 0;
     previousTime = 0;
-    if (!document.hidden && !lost && !disposed) {
+    if (!document.hidden && !lost && !disposed && active) {
       render(performance.now());
       if (state && !state.settings.reducedMotion && !preference.matches) frame = requestAnimationFrame(animate);
     }
   }
   function resize(): void {
+    if (!canvas.clientWidth || !canvas.clientHeight) return;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
     refresh();
@@ -110,10 +115,16 @@ export function createPetScene(canvas: HTMLCanvasElement, onError: (message: str
       const wasReduced = state?.settings.reducedMotion;
       const wasHome = state?.pet.atHome;
       state = next;
+      cat.setCoat(next.settings);
       attention = next.attention;
       if (!frame || wasReduced !== next.settings.reducedMotion || wasHome !== next.pet.atHome) refresh();
     },
     look(next: Attention): void { attention = next; },
+    setActive(next: boolean): void {
+      if (active === next) return;
+      active = next;
+      refresh();
+    },
     dispose(): void {
       disposed = true;
       if (frame) cancelAnimationFrame(frame);

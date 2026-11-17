@@ -1,4 +1,5 @@
 import type { CareAction, PetState, Settings } from '../shared/contracts.js';
+import { DEFAULT_SETTINGS } from '../shared/contracts.js';
 
 const APP_NAME = /^[a-zA-Z0-9][a-zA-Z0-9 ._()+-]{0,79}$/;
 export function normalizeAppName(value: string): string {
@@ -10,6 +11,13 @@ export function validateSettings(value: unknown): Settings {
   const candidate = value as Record<string, unknown>;
   const petSize = candidate.petSize === undefined ? 1 : candidate.petSize;
   const breakReminders = candidate.breakReminders === undefined ? true : candidate.breakReminders;
+  const coatPattern = candidate.coatPattern === undefined ? DEFAULT_SETTINGS.coatPattern : candidate.coatPattern;
+  const coatColor = candidate.coatColor === undefined ? DEFAULT_SETTINGS.coatColor : candidate.coatColor;
+  const accentColor = candidate.accentColor === undefined ? DEFAULT_SETTINGS.accentColor : candidate.accentColor;
+  if ((coatPattern !== 'single' && coatPattern !== 'dual') || typeof coatColor !== 'string'
+    || typeof accentColor !== 'string' || !/^#[a-fA-F0-9]{6}$/.test(coatColor) || !/^#[a-fA-F0-9]{6}$/.test(accentColor)) {
+    throw new Error('Choose single or dual tone and six-digit hex colors for Nooki’s coat.');
+  }
   if (typeof candidate.launchAtLogin !== 'boolean' || typeof candidate.aiEnabled !== 'boolean'
     || typeof candidate.reducedMotion !== 'boolean'
     || !['off', 'quiet', 'balanced', 'chatty'].includes(String(candidate.commentFrequency))
@@ -33,6 +41,9 @@ export function validateSettings(value: unknown): Settings {
     allowedApps: [...new Set(apps)],
     petSize,
     breakReminders,
+    coatPattern,
+    coatColor: coatColor.toLowerCase(),
+    accentColor: accentColor.toLowerCase(),
   };
 }
 

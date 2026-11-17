@@ -32,9 +32,14 @@ FORM: Approved compact utility sheet and original real-time 3D character; user-p
         <button id="restore-button" type="button" class="secondary">Bring Nooki back</button>
       </header>
       <div class="presence"><span class="presence-dot" aria-hidden="true"></span><p id="presence-text" role="status">Getting to know Nooki…</p><span id="mode-label">Scripted companion</span></div>
-      <p class="gesture-hint">Right-click Nooki for care and settings. Drag to move; tap to pet. Keyboard: focus Nooki and press Enter for the care menu.</p>
+      <nav class="settings-pages" aria-label="Settings pages">
+        <button id="company-page" type="button" class="secondary" aria-pressed="true" aria-controls="company-panel">Everyday company</button>
+        <button id="coat-page" type="button" class="secondary" aria-pressed="false" aria-controls="coat-panel">Coat closet</button>
+      </nav>
+      <p id="gesture-hint" class="gesture-hint">Right-click Nooki for care and settings. Drag to move; tap to pet. Keyboard: focus Nooki and press Enter for the care menu.</p>
       <p id="settings-error" class="notice error" role="alert" hidden></p>
       <form id="settings-form" novalidate>
+        <div id="company-panel">
         <section aria-labelledby="everyday-heading">
           <h2 id="everyday-heading">Everyday company</h2>
           <div class="setting-row">
@@ -70,9 +75,45 @@ FORM: Approved compact utility sheet and original real-time 3D character; user-p
             <input id="ai-enabled" type="checkbox" aria-describedby="ai-note">
           </div>
         </section>
+        </div>
+        <section id="coat-panel" aria-labelledby="coat-heading" hidden>
+          <h2 id="coat-heading">Nooki, in your colors.</h2>
+          <p>One cozy coat or a little contrast. Try a palette, then make it hers.</p>
+          <div class="coat-editor">
+            <figure class="coat-preview">
+              <div class="coat-stage"><canvas id="coat-preview" role="img" aria-label="Live 3D preview of Nooki’s coat"></canvas></div>
+              <figcaption>Just trying it on. Save to wear it on the desktop.</figcaption>
+            </figure>
+            <div class="coat-fields">
+              <label for="coat-pattern" class="field-label">A little contrast?</label>
+              <select id="coat-pattern" aria-describedby="coat-pattern-note"><option value="single">Single tone</option><option value="dual">Dual tone</option></select>
+              <p id="coat-pattern-note" class="field-hint">Dual tone adds a contrasting ear, muzzle, chest and paw tips.</p>
+              <div class="coat-color-row">
+                <div><label for="coat-color">Coat color</label><output id="coat-color-value" for="coat-color"></output></div>
+                <input id="coat-color" type="color" aria-describedby="coat-color-value" value="#bda6df">
+              </div>
+              <div class="coat-color-row">
+                <div><label for="accent-color">Contrast color</label><output id="accent-color-value" for="accent-color"></output></div>
+                <input id="accent-color" type="color" aria-describedby="accent-color-value accent-note" value="#fff0d9">
+              </div>
+              <p id="accent-note" class="field-hint">Your contrast color is kept when you switch to single tone.</p>
+              <button id="revert-coat" type="button" class="secondary" disabled>Revert coat edits</button>
+            </div>
+          </div>
+          <p id="coat-preview-error" class="notice error" role="alert" hidden></p>
+          <fieldset class="coat-palettes">
+            <legend>A few good pairings</legend>
+            <div class="coat-palette-options">
+              <button id="palette-lilac" type="button" class="coat-preset secondary" aria-pressed="false" disabled>Lilac cream</button>
+              <button id="palette-cocoa" type="button" class="coat-preset secondary" aria-pressed="false" disabled>Cocoa cream</button>
+              <button id="palette-peach" type="button" class="coat-preset secondary" aria-pressed="false" disabled>Peach milk</button>
+              <button id="palette-cloud" type="button" class="coat-preset secondary" aria-pressed="false" disabled>Storm cloud</button>
+            </div>
+          </fieldset>
+        </section>
         <div class="save-bar"><p id="save-status" role="status" aria-live="polite">Your preferences stay on this device.</p><button id="save-button" type="submit" disabled>Save preferences</button></div>
       </form>
-      <section class="model-section" aria-labelledby="model-heading">
+      <section id="model-section" class="model-section" aria-labelledby="model-heading">
         <div class="section-title"><h2 id="model-heading">Optional local model</h2><span id="model-phase" class="phase">Checking…</span></div>
         <p>Scripted care, play and companionship are always available. Download only if you would like AI comments.</p>
         <dl class="model-facts">

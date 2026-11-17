@@ -612,6 +612,69 @@ async function start(): Promise<void> {
     broadcast();
     await new Promise((resolve) => setTimeout(resolve, 300));
     await writeFile(path.join(imageDirectory, 'settings.png'), (await settingsWindow.capturePage()).toPNG());
+    const waitForColors = async (target: BrowserWindow, canvas: string, base: string, accent: string): Promise<void> => {
+      const deadline = Date.now() + 10_000;
+      while (Date.now() < deadline) {
+        const matches: boolean = await target.webContents.executeJavaScript(`(() => {
+          const canvas = document.getElementById(${JSON.stringify(canvas)});
+          return canvas?.dataset.ready === 'true' && canvas.dataset.coatColor === ${JSON.stringify(base)}
+            && canvas.dataset.accentColor === ${JSON.stringify(accent)};
+        })()`);
+        if (matches) return;
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      throw new Error(`The actual 3D ${canvas} did not render the chosen coat colors.`);
+    };
+    const coatBeforePreview = settings.coatColor;
+    await settingsWindow.webContents.executeJavaScript(`document.getElementById('coat-page').click(); document.getElementById('palette-cocoa').click();`);
+    await waitForColors(settingsWindow, 'coat-preview', '79584f', 'f4dfc3');
+    if (settings.coatColor !== coatBeforePreview) throw new Error('A preview changed the saved desktop coat.');
+    await writeFile(path.join(imageDirectory, 'coat-closet.png'), (await settingsWindow.capturePage()).toPNG());
+    settingsWindow.setSize(500, 800);
+    await new Promise(resolve => setTimeout(resolve, 300));
+    const saveVisible: boolean = await settingsWindow.webContents.executeJavaScript(`(() => {
+      const bounds = document.getElementById('save-button').getBoundingClientRect();
+      return bounds.top >= 0 && bounds.bottom <= innerHeight;
+    })()`);
+    if (!saveVisible) throw new Error('Coat customization hid Save below the compact viewport.');
+    await writeFile(path.join(imageDirectory, 'coat-closet-compact.png'), (await settingsWindow.capturePage()).toPNG());
+    settingsWindow.setSize(660, 800);
+    await settingsWindow.webContents.executeJavaScript(`(() => {
+      const pattern = document.getElementById('coat-pattern');
+      pattern.value = 'single';
+      pattern.dispatchEvent(new Event('change', { bubbles: true }));
+    })()`);
+    await waitForColors(settingsWindow, 'coat-preview', '79584f', '79584f');
+    await settingsWindow.webContents.executeJavaScript(`document.getElementById('settings-form').requestSubmit()`);
+    await waitForColors(window, 'pet-canvas', '79584f', '79584f');
+    await writeFile(path.join(imageDirectory, 'coat-single.png'), (await window.capturePage()).toPNG());
+    await new Promise<void>(resolve => {
+      settingsWindow.once('closed', () => resolve());
+      settingsWindow.close();
+    });
+    openSettings();
+    const reopened = preferences;
+    if (!reopened) throw new Error('Could not reopen the saved coat preferences.');
+    if (reopened.webContents.isLoadingMainFrame()) {
+      await new Promise<void>(resolve => reopened.webContents.once('did-finish-load', () => resolve()));
+    }
+    const loadedColors: boolean = await reopened.webContents.executeJavaScript(`window.nooki.getSnapshot().then(snapshot =>
+      snapshot.settings.coatPattern === 'single' && snapshot.settings.coatColor === '#79584f'
+        && snapshot.settings.accentColor === '#f4dfc3')`);
+    if (!loadedColors) throw new Error('Reopened preferences lost the saved single coat or remembered contrast.');
+    await reopened.webContents.executeJavaScript(`(() => {
+      document.getElementById('coat-page').click();
+      const pattern = document.getElementById('coat-pattern');
+      pattern.value = 'dual';
+      pattern.dispatchEvent(new Event('change', { bubbles: true }));
+      const color = document.getElementById('coat-color');
+      color.value = '#315b65';
+      color.dispatchEvent(new Event('input', { bubbles: true }));
+    })()`);
+    await waitForColors(reopened, 'coat-preview', '315b65', 'f4dfc3');
+    await reopened.webContents.executeJavaScript(`document.getElementById('settings-form').requestSubmit()`);
+    await waitForColors(window, 'pet-canvas', '315b65', 'f4dfc3');
+    await writeFile(path.join(imageDirectory, 'coat-dual.png'), (await window.capturePage()).toPNG());
     if (process.argv.includes('--smoke-inference')) {
       const line = await ai.generate('code.exe', pet);
       if (ai.getStatus().phase !== 'ready') throw new Error(`Local inference smoke failed: ${ai.getStatus().error ?? 'Backend unavailable'}`);
@@ -624,7 +687,9 @@ async function start(): Promise<void> {
     if (reloaded.state?.settings.allowedApps[0] !== 'code.exe' || !reloaded.state.settings.reducedMotion) {
       throw new Error('Saved preferences did not round-trip.');
     }
-    console.log('NOOKI_SMOKE passed: real transparent WebGL, directional gaze/neutral reset, reduced motion, isolated renderer/IPC, care, mimic, irritation, break reminders, home/needs pause, restore, size, consent, privilege guards, persistence.');
+    if (reloaded.state.settings.coatPattern !== 'dual' || reloaded.state.settings.coatColor !== '#315b65'
+      || reloaded.state.settings.accentColor !== '#f4dfc3') throw new Error('Custom coat colors did not persist.');
+    console.log('NOOKI_SMOKE passed: real transparent WebGL, directional gaze/neutral reset, reduced motion, isolated renderer/IPC, care, mimic, irritation, break reminders, home/needs pause, restore, size, consent, privilege guards, persistent single/dual coat, draft-only 3D preview, presets/custom colors, persistence.');
     app.quit();
   }
 }

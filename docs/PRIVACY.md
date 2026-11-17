@@ -32,13 +32,15 @@ Hugging Face/file delivery hosts receive your IP address and ordinary HTTP downl
 
 Two CPU threads, 512-token context, 64-token batch and 48-token output cap favor a small resource budget, not high-quality reasoning. At least 512 MiB free RAM is required before loading; Electron and native contexts consume additional memory. Downloads require at least the model's size in available disk space. Failed writes are surfaced. There is no GPU dependency.
 
-The **pet's 3D graphics**, unlike inference, require a WebGL 2-capable graphics context. Rendering requests low power, caps draw rate at 30fps and pixel ratio at 2, and stops its animation loop while hidden or in reduced-motion mode. Settings do not initialize 3D graphics. GPU/driver compatibility and sustained CPU/GPU/memory use must be evaluated on target machines; these caps are not a measured battery-life guarantee.
+The **pet's 3D graphics**, unlike inference, require a WebGL 2-capable graphics context. Rendering requests low power, caps draw rate at 30fps and pixel ratio at 2, and stops its animation loop while hidden or in reduced-motion mode. Settings initializes a separate preview context only when Coat closet first opens; its animation stops when leaving that page. Preview failure does not block saving color choices. GPU/driver compatibility and sustained CPU/GPU/memory use must be evaluated on target machines; these caps are not a measured battery-life guarantee.
 
 Inference times out cooperatively after 12 seconds; native operations and cleanup are not a hard real-time deadline. Home/disable/quit abort in-flight work and release resources. Core behavior continues during loading and errors. The model unloads after each request rather than retaining RAM/history. Small-model output is not reliable factual advice, and repeated/invalid text is rejected in favor of scripted behavior.
 
 ## Local data and removal
 
 Normal state lives under Electron's `userData` directory (`%APPDATA%\nooki` on Windows by default, `~/Library/Application Support/nooki` on macOS; product name/runtime may affect casing). It contains needs, home state, preferences, a local active-companion timer for break reminders, disturbance state, and allowlisted application names. It does not contain app-usage logs, model conversation history or telemetry identifiers.
+
+Appearance preferences contain only a single/dual pattern and two six-digit RGB hex colors, validated in main. Coat closet drafts remain in renderer memory until explicitly saved. No character assets or palettes are fetched, and appearance choices are not sent to inference or a remote service.
 
 Dragging moves only Nooki's own window. Main reads cursor position for movement/following and nearby head/eye attention. The gaze bridge sends only bounded normalized direction, never raw global coordinates, at most 10Hz; it neutralizes while home, hidden, asleep, dragging or reduced-motion enabled. Gaze is transient: never saved, logged, sent over the network or included in AI prompts. No pointer history is recorded; only a fading disturbance scalar is retained for playful reactions. Imitation uses a timer, not activity capture. Break reminders use companion-active time, not keyboard monitoring. Jokes about other applications have no corresponding control or close API.
 

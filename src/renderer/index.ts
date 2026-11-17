@@ -1,7 +1,11 @@
-import type { CommentFrequency, NookiApi, Settings, Snapshot } from '../shared/contracts.js';
+import type { CoatColors, CoatPattern, CommentFrequency, NookiApi, Settings, Snapshot } from '../shared/contracts.js';
+import { COAT_PALETTES } from './coats.js';
 
 declare global {
   interface Window { nooki: NookiApi; }
+  interface WindowEventMap {
+    'nooki:coat-preview': CustomEvent<{ snapshot: Snapshot; active: boolean }>;
+  }
 }
 
 function element<T extends HTMLElement>(id: string): T {
@@ -33,6 +37,9 @@ const inputs = {
   allowedApps: appsInput,
   petSize: element<HTMLSelectElement>('pet-size'),
   breakReminders: element<HTMLInputElement>('break-reminders'),
+  coatPattern: element<HTMLSelectElement>('coat-pattern'),
+  coatColor: element<HTMLInputElement>('coat-color'),
+  accentColor: element<HTMLInputElement>('accent-color'),
 };
 type SettingKey = keyof Settings;
 let snapshot: Snapshot | undefined;
@@ -45,6 +52,30 @@ let modelOperationVersion = 0;
 let careBusy = false;
 let snapshotEvents = 0;
 let localError = '';
+let coatPage = false;
+const coatKeys: Array<keyof CoatColors> = ['coatPattern', 'coatColor', 'accentColor'];
+
+function renderCoat(): void {
+  if (!draft || !snapshot || !isSettings) return;
+  inputs.accentColor.disabled = draft.coatPattern === 'single';
+  showText('coat-color-value', draft.coatColor.toUpperCase());
+  showText('accent-color-value', draft.accentColor.toUpperCase());
+  element<HTMLButtonElement>('revert-coat').disabled = !coatKeys.some(key => dirty.has(key));
+  for (const palette of COAT_PALETTES) {
+    const button = element<HTMLButtonElement>(`palette-${palette.id}`);
+    button.disabled = false;
+    button.setAttribute('aria-pressed', String(draft.coatColor === palette.coatColor && draft.accentColor === palette.accentColor));
+  }
+  window.dispatchEvent(new CustomEvent('nooki:coat-preview', {
+    detail: {
+      active: coatPage,
+      snapshot: {
+        ...snapshot, settings: { ...draft }, pet: { ...snapshot.pet, mood: 'idle', atHome: false },
+        comment: null, moving: false, attention: { x: 0, y: 0, nearby: false },
+      },
+    },
+  }));
+}
 
 function showText(id: string, value: string): void {
   const target = element(id);
@@ -94,6 +125,8 @@ function writeInput(key: SettingKey, settings: Settings): void {
     inputs.commentFrequency.value = settings.commentFrequency;
   } else if (key === 'petSize') {
     inputs.petSize.value = String(settings.petSize);
+  } else if (key === 'coatColor' || key === 'accentColor' || key === 'coatPattern') {
+    inputs[key].value = settings[key];
   } else {
     inputs[key].checked = settings[key];
   }
@@ -107,10 +140,13 @@ function syncSettings(next: Settings): void {
     if (key === 'allowedApps') draft.allowedApps = [...next.allowedApps];
     else if (key === 'commentFrequency') draft.commentFrequency = next.commentFrequency;
     else if (key === 'petSize') draft.petSize = next.petSize;
+    else if (key === 'coatPattern') draft.coatPattern = next.coatPattern;
+    else if (key === 'coatColor' || key === 'accentColor') draft[key] = next[key];
     else draft[key] = next[key];
     writeInput(key, next);
   }
   updateSaveState();
+  renderCoat();
 }
 
 function renderPet(next: Snapshot): void {
@@ -118,7 +154,7 @@ function renderPet(next: Snapshot): void {
   cat.dataset.mood = mood;
   cat.dataset.moving = String(next.moving);
   const activity = mood === 'home' ? 'going home' : mood === 'mimicking' ? 'pretending to work on a tiny laptop' : mood === 'irritated' ? 'theatrically grumpy' : mood;
-  cat.setAttribute('aria-label', `Nooki, a lilac cat, is ${activity}. Open care menu.`);
+  cat.setAttribute('aria-label', `Nooki, a cat, is ${activity}. Open care menu.`);
   const speech = mood === 'home' ? 'Heading home. See you soon!' : next.comment || '';
   showText('speech', speech);
   element('speech').hidden = !speech;
@@ -189,7 +225,7 @@ async function operation(task: () => Promise<unknown>, failure: string): Promise
 }
 
 for (const key of Object.keys(inputs) as SettingKey[]) {
-  inputs[key].addEventListener(key === 'allowedApps' ? 'input' : 'change', () => {
+  inputs[key].addEventListener(key === 'allowedApps' || key === 'coatColor' || key === 'accentColor' ? 'input' : 'change', () => {
     if (!draft) return;
     dirty.set(key, ++revision);
     if (key === 'allowedApps') {
@@ -199,11 +235,59 @@ for (const key of Object.keys(inputs) as SettingKey[]) {
       draft.commentFrequency = inputs.commentFrequency.value as CommentFrequency;
     } else if (key === 'petSize') {
       draft.petSize = Number(inputs.petSize.value);
+    } else if (key === 'coatPattern') {
+      draft.coatPattern = inputs.coatPattern.value as CoatPattern;
+    } else if (key === 'coatColor' || key === 'accentColor') {
+      draft[key] = inputs[key].value;
     } else draft[key] = inputs[key].checked;
     saveStatus.textContent = 'Unsaved changes';
     updateSaveState();
+    renderCoat();
   });
 }
+
+for (const palette of COAT_PALETTES) {
+  const button = element<HTMLButtonElement>(`palette-${palette.id}`);
+  button.style.setProperty('--coat-base', palette.coatColor);
+  button.style.setProperty('--coat-accent', palette.accentColor);
+  button.addEventListener('click', () => {
+    if (!draft) return;
+    for (const key of ['coatColor', 'accentColor'] as const) {
+      draft[key] = palette[key];
+      dirty.set(key, ++revision);
+      writeInput(key, draft);
+    }
+    saveStatus.textContent = 'Unsaved changes';
+    updateSaveState();
+    renderCoat();
+  });
+}
+element('revert-coat').addEventListener('click', () => {
+  if (!draft || !snapshot) return;
+  draft.coatPattern = snapshot.settings.coatPattern;
+  draft.coatColor = snapshot.settings.coatColor;
+  draft.accentColor = snapshot.settings.accentColor;
+  for (const key of coatKeys) {
+    if (saving) dirty.set(key, ++revision);
+    else dirty.delete(key);
+    writeInput(key, draft);
+  }
+  saveStatus.textContent = dirty.size ? 'Unsaved changes' : 'Coat edits reverted.';
+  updateSaveState();
+  renderCoat();
+});
+function selectSettingsPage(coat: boolean): void {
+  coatPage = coat;
+  element('company-panel').hidden = coat;
+  element('coat-panel').hidden = !coat;
+  element('model-section').hidden = coat;
+  element('gesture-hint').hidden = coat;
+  element('company-page').setAttribute('aria-pressed', String(!coat));
+  element('coat-page').setAttribute('aria-pressed', String(coat));
+  renderCoat();
+}
+element('company-page').addEventListener('click', () => selectSettingsPage(false));
+element('coat-page').addEventListener('click', () => selectSettingsPage(true));
 
 form.addEventListener('submit', event => {
   event.preventDefault();

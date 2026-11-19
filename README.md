@@ -2,7 +2,26 @@
 
 A gentle desktop companion for Windows and macOS. Choose a **cat, dog, panda or octopus**. Feed, pet or play; let Miso wander nearby, or send them home for quiet. Needs never cause death or sickness. Core companionship works offline without AI.
 
+[![Download prototype prerelease](https://img.shields.io/badge/download-v0.1.0--prototype.1-orange?style=for-the-badge)](https://github.com/kriteshpokhrel/miso/releases/tag/v0.1.0-prototype.1)
+[![Desktop checks](https://github.com/kriteshpokhrel/miso/actions/workflows/ci.yml/badge.svg)](https://github.com/kriteshpokhrel/miso/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg?style=for-the-badge)](LICENSE)
+
+[**Download the prototype**](#download) · [All releases](https://github.com/kriteshpokhrel/miso/releases) · [Build from source](#run)
+
 **Prototype prerelease:** original real-time 3D companions with glossy expressive eyes and compact settings. Windows development/native smoke verification is available; macOS integrations require verification on a Mac. Builds are unsigned. The pet requires WebGL 2-capable graphics; failures are reported visibly.
+
+## Download
+
+Get **[v0.1.0-prototype.1](https://github.com/kriteshpokhrel/miso/releases/tag/v0.1.0-prototype.1)** from GitHub Releases:
+
+| Platform | Download | Notes |
+| --- | --- | --- |
+| Windows | [NSIS installer](https://github.com/kriteshpokhrel/miso/releases/download/v0.1.0-prototype.1/Miso.Setup.0.1.0-prototype.1.exe) | Unsigned prototype |
+| macOS (Apple Silicon / ARM64) | [DMG](https://github.com/kriteshpokhrel/miso/releases/download/v0.1.0-prototype.1/Miso-0.1.0-prototype.1-arm64.dmg) / [ZIP](https://github.com/kriteshpokhrel/miso/releases/download/v0.1.0-prototype.1/Miso-0.1.0-prototype.1-arm64-mac.zip) | Unsigned, not notarized; macOS runtime remains unverified |
+
+[SHA-256 checksums](https://github.com/kriteshpokhrel/miso/releases/download/v0.1.0-prototype.1/SHA256SUMS.txt) accompany the downloads. Read the [release notes and known limitations](https://github.com/kriteshpokhrel/miso/releases/tag/v0.1.0-prototype.1) before evaluating; macOS native smoke checks did not complete successfully. No Intel Mac or Linux installer is included.
+
+This is deliberately a **prerelease**, not a production release. GitHub excludes prereleases from its **Latest** release endpoint, so use the direct links above or [All releases](https://github.com/kriteshpokhrel/miso/releases), not `/releases/latest`.
 
 ## Run
 

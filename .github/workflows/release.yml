@@ -62,7 +62,16 @@ jobs:
           path: release-assets
           merge-multiple: true
       - name: Generate checksums
-        run: sha256sum release-assets/* > release-assets/SHA256SUMS.txt
+        working-directory: release-assets
+        run: |
+          for file in *; do
+            normalized="${file// /.}"
+            if [ "$file" != "$normalized" ]; then
+              test ! -e "$normalized"
+              mv -- "$file" "$normalized"
+            fi
+          done
+          sha256sum * > SHA256SUMS.txt
       - name: Publish prototype prerelease
         env:
           GH_TOKEN: ${{ github.token }}

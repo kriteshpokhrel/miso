@@ -57,3 +57,18 @@ The Windows/macOS CI evidence above is for the named source commit; it does not 
 | Native macOS `npm run smoke` | Failed in six attempts. Two first timed out waiting for the 3D coat preview to report selected colors; another stopped at a stationary-tap assertion; another timed out waiting for the octopus preview. The diagnostic run reported the coat canvas `ready:true`, still at its default colors `bda6df`/`fff0d9`, with no render/preview error while cocoa colors were expected. After the smoke explicitly showed/focused Settings, the dog rendered but the panda preview timed out. No cause was isolated; this does not establish a macOS runtime defect or verify macOS runtime behavior. The tag release gate does not include native smoke, and this limitation is disclosed in the prototype release notes. |
 | Windows NSIS installer and tag-triggered release workflow | [Release run 44587325283](https://github.com/kriteshpokhrel/miso/actions/runs/44587325283) passed Windows and macOS clean installation, 145 tests, typecheck, installer generation and publication for source `76d015b`. |
 | Published prototype | [v0.1.0-prototype.1](https://github.com/kriteshpokhrel/miso/releases/tag/v0.1.0-prototype.1) is a prerelease, not a draft or production release, with Windows NSIS, macOS ARM64 DMG/ZIP and SHA-256 checksums. The manifest was corrected after publication to use downloaded asset basenames, including GitHub's space-to-dot normalization of the Windows installer name; all three hashes match GitHub's uploaded-asset digests. Native runtime limitations above remain unresolved. |
+
+## Release metadata repair (2026-11-20)
+
+A lightweight `v0.1.0` tag at merge commit `dbadf558` triggered
+[run 44590020212](https://github.com/kriteshpokhrel/miso/actions/runs/44590020212).
+Both package jobs rejected the tag/version mismatch and publication was skipped.
+Separately, the existing prototype release entry had been relabeled as
+`v0.1.0`/production and its installer filenames changed without changing their
+digests. The same release entry and assets were restored to
+`v0.1.0-prototype.1`, prototype notes, original filenames and prerelease status;
+neither tag was moved or deleted and no binaries were rebuilt. The stable tag
+is retained as a historical ref, not a supported production release.
+
+The follow-up workflow limits triggers to prototype tags, validates strict
+prototype numbering and both manifests, and explicitly disables Latest.

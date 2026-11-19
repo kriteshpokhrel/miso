@@ -22,7 +22,11 @@ Implemented: tray/menu-bar template icon, transparent overlay, work-area bounds,
 
 Use `npm ci`, `npm test`, `npm run typecheck`, `npm run build`, then `npm run pack` on each target host. On Windows, `npm run dist -- --win nsis`; on macOS, `npm run dist -- --mac dmg zip`. Native binaries are platform/architecture specific; do not copy Windows `node_modules` to macOS or between architectures.
 
-The committed CI workflow checks Windows and macOS dependencies, tests, types and package build. A configured workflow is not evidence that a remote run passed. Installer publication, signing, notarization and auto-updates are deliberately not automated.
+The CI workflow checks Windows and macOS dependencies, tests, types and unpacked package builds. A configured workflow is not evidence that a remote run passed. Pushing a matching `v<version>` tag starts the actual Windows and macOS release package jobs; the tag must match `package.json`, and the GitHub prerelease is created only after both jobs pass dependency installation, tests, typechecking and native installer generation. It attaches the Windows NSIS installer and macOS DMG/ZIP with SHA-256 checksums. It does not sign or notarize them, run target-device/manual checks, or configure auto-updates. Linux is not a supported release target.
+
+## Prototype prerelease
+
+The current package version is `0.1.0-prototype.1`; its matching tag is `v0.1.0-prototype.1`. The release workflow creates a GitHub prerelease, not a production release. Review [the release notes](RELEASE_NOTES.md) for user-facing limitations. The tag starts the required platform jobs; do not describe the release as available until the workflow succeeds on both platforms. macOS runtime permissions, signing/notarization, clean-machine installation, Windows installed-app behavior, and physical display/hardware scenarios still require separate verification.
 
 ## Manual release checklist
 

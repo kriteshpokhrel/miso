@@ -2,7 +2,7 @@
 
 A gentle desktop companion for Windows and macOS. Choose a **cat, dog, panda or octopus**. Feed, pet or play; let Miso wander nearby, or send them home for quiet. Needs never cause death or sickness. Core companionship works offline without AI.
 
-**Prototype:** original real-time 3D companions with glossy expressive eyes and compact settings. Windows development/native smoke verification is available; macOS integrations require verification on a Mac. Builds are unsigned. The pet requires WebGL 2-capable graphics; failures are reported visibly.
+**Prototype prerelease:** original real-time 3D companions with glossy expressive eyes and compact settings. Windows development/native smoke verification is available; macOS integrations require verification on a Mac. Builds are unsigned. The pet requires WebGL 2-capable graphics; failures are reported visibly.
 
 ## Run
 
@@ -61,7 +61,7 @@ npm run dist -- --win nsis
 
 After you have independently consented and downloaded the catalog model into `.smoke-data\models`, `npx electron . --smoke-test --smoke-inference` also exercises the embedded backend. This flag itself does **not** download a model. Do not copy model weights into source control or the installer.
 
-`npm run pack` produces an unpacked app under `release`. `npm run dist` builds the host platform's installer. A macOS `.dmg`/`.zip` must be built on a Mac. There is no auto-updater or automatic release publishing. Do not ship unsigned prototypes as trusted production releases.
+`npm run pack` produces an unpacked app under `release`. `npm run dist` builds the host platform's installer. A macOS `.dmg`/`.zip` must be built on a Mac. Pushing a matching `v<version>` tag builds and publishes a prototype prerelease after Windows and macOS tests, typechecks and installers succeed. There is no auto-updater. Builds are unsigned; do not treat or distribute this prototype as a trusted production release. See [release notes](docs/RELEASE_NOTES.md) and the [platform release boundaries](docs/PLATFORMS.md#prototype-prerelease).
 
 ## Structure
 

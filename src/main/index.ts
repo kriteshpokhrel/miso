@@ -1287,18 +1287,34 @@ async function start(): Promise<void> {
     settingsWindow.setSize(660, 800);
     const waitForColors = async (target: BrowserWindow, canvas: string, base: string, accent: string): Promise<void> => {
       const deadline = Date.now() + 10_000;
+      let actual = '';
       while (Date.now() < deadline) {
-        const matches: boolean = await target.webContents.executeJavaScript(`(() => {
+        actual = await target.webContents.executeJavaScript(`(() => {
           const canvas = document.getElementById(${JSON.stringify(canvas)});
-          return canvas?.dataset.ready === 'true' && canvas.dataset.coatColor === ${JSON.stringify(base)}
-            && canvas.dataset.accentColor === ${JSON.stringify(accent)};
+          return JSON.stringify({
+            ready: canvas?.dataset.ready ?? null,
+            coatColor: canvas?.dataset.coatColor ?? null,
+            accentColor: canvas?.dataset.accentColor ?? null,
+            renderError: canvas?.dataset.renderError ?? null,
+            previewError: document.getElementById('coat-preview-error')?.textContent ?? null,
+            visibility: document.visibilityState,
+            size: canvas ? [canvas.clientWidth, canvas.clientHeight] : null,
+          });
         })()`);
-        if (matches) return;
+        const state = JSON.parse(actual) as {
+          ready: string | null;
+          coatColor: string | null;
+          accentColor: string | null;
+        };
+        if (state.ready === 'true' && state.coatColor === base && state.accentColor === accent) return;
         await new Promise(resolve => setTimeout(resolve, 100));
       }
-      throw new Error(`The actual 3D ${canvas} did not render the chosen coat colors.`);
+      throw new Error(`The actual 3D ${canvas} did not render the chosen coat colors: ${actual}`);
     };
     const coatBeforePreview = settings.coatColor;
+    settingsWindow.show();
+    settingsWindow.focus();
+    await new Promise(resolve => setTimeout(resolve, 200));
     await settingsWindow.webContents.executeJavaScript(`document.getElementById('coat-page').click(); document.getElementById('palette-cocoa').click();`);
     await waitForColors(settingsWindow, 'coat-preview', '79584f', 'f4dfc3');
     if (settings.coatColor !== coatBeforePreview) throw new Error('A preview changed the saved desktop coat.');
@@ -1386,15 +1402,22 @@ async function start(): Promise<void> {
         window.miso.updateSettings({...settings, petSize:1, motionLevel:'gentle', followWindow:false, stayPut:true}))`);
       async function waitForSpecies(target: BrowserWindow, canvas: string, species: string): Promise<void> {
         const deadline = Date.now() + 5000;
+        let actual = '';
         while (Date.now() < deadline) {
-          const rendered: boolean = await target.webContents.executeJavaScript(`(() => {
+          actual = await target.webContents.executeJavaScript(`(() => {
             const canvas = document.getElementById(${JSON.stringify(canvas)});
-            return canvas.dataset.ready === 'true' && canvas.dataset.species === ${JSON.stringify(species)};
+            return JSON.stringify({
+              ready: canvas?.dataset.ready ?? null,
+              species: canvas?.dataset.species ?? null,
+              renderError: canvas?.dataset.renderError ?? null,
+              previewError: document.getElementById('coat-preview-error')?.textContent ?? null,
+            });
           })()`);
-          if (rendered) return;
+          const state = JSON.parse(actual) as { ready: string | null; species: string | null };
+          if (state.ready === 'true' && state.species === species) return;
           await new Promise(resolve => setTimeout(resolve, 50));
         }
-        throw new Error(`The ${species} companion did not render on ${canvas}.`);
+        throw new Error(`The ${species} companion did not render on ${canvas}: ${actual}`);
       }
       for (const species of ['dog', 'panda', 'octopus'] as const) {
         const before = pet.species;

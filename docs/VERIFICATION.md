@@ -44,4 +44,15 @@ The approved walking change preserves the original body, face, eyes, tail, coat 
 - Pixel-perfect transparent click-through is not implemented; the pet window's small rectangular bounds can intercept clicks.
 - WebGL 2 compatibility on other graphics drivers/hardware, context-loss recovery under an actual driver failure, and long-running 3D CPU/GPU/memory/battery cost. The renderer reports unavailable/lost graphics explicitly and caps draws at 30fps and pixel ratio at 2; those are not battery-life measurements.
 
-The Windows/macOS CI evidence above is for the named source commit; it does not replace the target-platform/manual checks. No release was published. Impeccable's requested CLI update could not locate the app-bundled skill installation; this session used the installed design skill and completed its local detector/review.
+The Windows/macOS CI evidence above is for the named source commit; it does not replace the target-platform/manual checks. No release was published at the time of this earlier verification. Impeccable's requested CLI update could not locate the app-bundled skill installation; this session used the installed design skill and completed its local detector/review.
+
+## Release-preparation validation (2026-11-19)
+
+| Check | Result |
+| --- | --- |
+| `npm ci --no-audit --no-fund` | Passed on macOS ARM64 |
+| `npm test` | 145 tests passed |
+| `npm run typecheck` / `npm run build` | Passed |
+| `npm run dist -- --mac dmg zip` | Passed; unsigned macOS ARM64 DMG and ZIP generated. Code signing was skipped because no valid Developer ID identity is configured. This is packaging evidence, not macOS runtime verification. |
+| Native macOS `npm run smoke` | Failed in six attempts. Two first timed out waiting for the 3D coat preview to report selected colors; another stopped at a stationary-tap assertion; another timed out waiting for the octopus preview. The diagnostic run reported the coat canvas `ready:true`, still at its default colors `bda6df`/`fff0d9`, with no render/preview error while cocoa colors were expected. After the smoke explicitly showed/focused Settings, the dog rendered but the panda preview timed out. No cause was isolated; this does not establish a macOS runtime defect or verify macOS runtime behavior. The tag release gate does not include native smoke, and this limitation is disclosed in the prototype release notes. |
+| Windows NSIS installer and tag-triggered release workflow | Not yet run remotely. Pushing the matching tag starts both required Windows and macOS package jobs; GitHub publishes only if both pass. |
